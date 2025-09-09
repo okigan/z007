@@ -6,10 +6,10 @@ A lightweight and readable agent for interacting with LLM on AWS Bedrock with to
 
 ## Features
 
-- **Ultra Readable**: Clean, maintainable codebase in ~500 lines - easy to understand, modify, and extend
-- ⚡ **Lightning Fast**: Quick setup with `uvx z007`  with `AWS_PROFILE=<your profile>` in env and start chatting instantly  
+- 🟢 **Ultra Readable**: Clean, maintainable codebase in ~500 lines - easy to understand, modify, and extend
+- ⚡ **Super easy**: Just run `uvx z007`  with `AWS_PROFILE=<your profile>` in env and start chatting instantly  
 - ⚡ **Simple Install**: Quick install  `uv tool install --upgrade z007` and start chatting instantly `z007` with `AWS_PROFILE=<your profile>` in env
-- 🔧 **Tool Support**: Built-in calculator and custom tool integration
+- 🔧 **Tool Support**: Built-in calculator and easily use plain python functions as tools
 - 🔌 **MCP Integration**: Connect to Model Context Protocol servers
 - 🐍 **Python API**: Easy integration into your Python projects
 - 🚀 **Async**: Concurrent tool execution
@@ -45,7 +45,7 @@ z007
 z007 --model-id "anthropic.claude-3-sonnet-20240229-v1:0"
 
 # With MCP configuration
-z007 --mcp-config .vscode/mcp.json
+z007 --mcp-config ./mcp.json
 ```
 
 ### Python API
@@ -59,24 +59,6 @@ from z007 import Agent
 async def main():
     async with Agent(model_id="openai.gpt-oss-20b-1:0") as agent:
         response = await agent.run("What is 2+2?")
-    print(response)
-
-asyncio.run(main())
-```
-
-#### With tools
-
-```python
-import asyncio
-from z007 import Agent, create_calculator_tool
-
-async def main():
-    calculator = create_calculator_tool()
-    async with Agent(
-        model_id="openai.gpt-oss-20b-1:0",
-        tools=[calculator]
-    ) as agent:
-        response = await agent.run("Calculate 15 * 23 + 7")
     print(response)
 
 asyncio.run(main())

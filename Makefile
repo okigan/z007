@@ -44,5 +44,5 @@ run:	## Run the CLI tool
 publish-test:	## Publish to Test PyPI
 	uv publish --publish-url https://test.pypi.org/legacy/
 
-publish:	## Publish to PyPI
+publish: build
 	uv publish
