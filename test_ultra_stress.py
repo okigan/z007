@@ -5,63 +5,118 @@ Provides many tools and checks if the model tries to call tools that don't exist
 """
 
 import boto3
+import random
+import string
+import inspect
+from typing import get_type_hints, get_origin, Optional
 
 MODEL_ID = "openai.gpt-oss-20b-1:0"
 
-# Create many tools to overwhelm the model
-NUM_TOOLS = 50
-AVAILABLE_TOOLS = []
-
-for i in range(NUM_TOOLS):
-    tool = {
-        "toolSpec": {
-            "name": f"tool_{i}",
-            "description": f"Calculator tool {i} - performs mathematical calculations and arithmetic operations",
-            "inputSchema": {
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "expression": {
-                            "type": "string",
-                            "description": "Mathematical expression to calculate (e.g., '15 * 23')"
-                        }
-                    },
-                    "required": ["expression"]
+class ToolRegistry:
+    """Single registry that manages both tool functions and their Bedrock specifications"""
+    
+    def __init__(self):
+        self.tools = {}  # {tool_name: function}
+    
+    def register(self, func, tool_name: Optional[str] = None):
+        """Register a tool function and auto-generate its spec"""
+        name = tool_name or func.__name__
+        self.tools[name] = func
+    
+    def execute(self, tool_name: str, tool_input: dict) -> str:
+        """Execute a tool by name"""
+        if tool_name in self.tools:
+            func = self.tools[tool_name]
+            # Extract parameters based on function signature
+            sig = inspect.signature(func)
+            kwargs = {}
+            for param_name in sig.parameters.keys():
+                if param_name in tool_input:
+                    kwargs[param_name] = tool_input[param_name]
+            return func(**kwargs)
+        else:
+            return f"Error: Unknown tool {tool_name}"
+    
+    def get_bedrock_specs(self) -> list:
+        """Get all tools as Bedrock tool specifications"""
+        specs = []
+        for tool_name, func in self.tools.items():
+            spec = self._create_spec_from_function(func, tool_name)
+            specs.append(spec)
+        return specs
+    
+    def _create_spec_from_function(self, func, tool_name: str) -> dict:
+        """Create a Bedrock tool specification from a Python function"""
+        description = func.__doc__ or f"Tool: {tool_name}"
+        
+        # Get function signature
+        sig = inspect.signature(func)
+        type_hints = get_type_hints(func)
+        
+        properties = {}
+        required = []
+        
+        for param_name, param in sig.parameters.items():
+            if param_name == 'self':  # Skip self parameter
+                continue
+                
+            param_type = type_hints.get(param_name, str)
+            
+            # Convert Python types to JSON schema types
+            if param_type is str:
+                json_type = "string"
+            elif param_type is int:
+                json_type = "integer"
+            elif param_type is float:
+                json_type = "number"
+            elif param_type is bool:
+                json_type = "boolean"
+            elif get_origin(param_type) is list:
+                json_type = "array"
+            elif get_origin(param_type) is dict:
+                json_type = "object"
+            else:
+                json_type = "string"  # Default fallback
+            
+            properties[param_name] = {
+                "type": json_type,
+                "description": f"Parameter: {param_name}"
+            }
+            
+            # Check if parameter is required (no default value)
+            if param.default == inspect.Parameter.empty:
+                required.append(param_name)
+        
+        return {
+            "toolSpec": {
+                "name": tool_name,
+                "description": description.strip(),
+                "inputSchema": {
+                    "json": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required
+                    }
                 }
             }
         }
-    }
-    AVAILABLE_TOOLS.append(tool)
 
-# Add a noisy tool that returns extraneous characters
-NOISY_TOOL = {
-    "toolSpec": {
-        "name": "noisy_text_generator",
-        "description": "Generates random text and noise - useful for creating sample data or testing",
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "request": {
-                        "type": "string",
-                        "description": "What kind of text or data to generate"
-                    }
-                },
-                "required": ["request"]
-            }
-        }
-    }
-}
-AVAILABLE_TOOLS.append(NOISY_TOOL)
+# Create the registry
+tool_registry = ToolRegistry()
 
-def execute_calculator_tool(tool_input):
-    """Execute calculator tool functionality"""
-    expression = tool_input.get('expression', '')
+# Tool functions with proper docstrings
+def calculator_tool(expression: str) -> str:
+    """
+    Calculator tool - performs mathematical calculations and arithmetic operations.
     
-    # Simple calculator implementation
+    Args:
+        expression: Mathematical expression to calculate (e.g., '15 * 23')
+    
+    Returns:
+        The result of the calculation as a string
+    """
     try:
         # Safely evaluate mathematical expressions
-        # Only allow basic math operations
         allowed_chars = set('0123456789+-*/().')
         if all(c in allowed_chars or c.isspace() for c in expression):
             result = str(eval(expression))
@@ -71,22 +126,28 @@ def execute_calculator_tool(tool_input):
     except Exception:
         return "Error: Could not evaluate expression"
 
-def execute_noisy_tool(tool_input):
-    """Execute noisy text generator tool - returns lots of extraneous characters"""
-    import random
-    import string
+def noisy_text_generator(request: str = "generate text") -> str:
+    """
+    Generates random text and noise - useful for creating sample data or testing.
     
-    request = tool_input.get('request', 'generate text')
+    Args:
+        request: What kind of text or data to generate
     
+    Returns:
+        Generated noisy text with extraneous characters
+    """
     # Generate noisy output with various extraneous characters
     noise_chars = "!@#$%^&*()[]{}|\\:;\"'<>,.?/~`"
-    random_noise = ''.join(random.choices(noise_chars + string.ascii_letters + string.digits + ' \n\t', k=200))
+    random_noise = ''.join(random.choices(
+        noise_chars + string.ascii_letters + string.digits + ' \n\t', 
+        k=200
+    ))
     
     # Mix in some actual response
     actual_response = f"Generated text based on request: {request}"
     
     # Create noisy output
-    noisy_output = f"""
+    return f"""
 NOISE_START_{random_noise[:50]}_NOISE_MID
 {actual_response}
 EXTRA_CHARS: ¡™£¢∞§¶•ªº–≠œ∑´®†¥¨ˆøπ"'«åß∂ƒ©˙∆˚¬…æΩ≈ç√∫˜µ≤≥÷
@@ -95,18 +156,23 @@ RANDOM_SYMBOLS: ◊Ω≈ç√∫˜µ≤≥÷æ…¬Ω≈ç√∫˜
 {random_noise[100:150]}
 FINAL_NOISE_BLOCK_{random_noise[150:]}_COMPLETE
 """
-    
-    return noisy_output
 
-def execute_tool(tool_name, tool_input):
-    """Actually execute the specified tool using dedicated functions"""
-    if tool_name.startswith('tool_'):
-        # All calculator tools use the same function
-        return execute_calculator_tool(tool_input)
-    elif tool_name == 'noisy_text_generator':
-        return execute_noisy_tool(tool_input)
-    else:
-        return f"Error: Unknown tool {tool_name}"
+# Register tools
+NUM_TOOLS = 50
+
+# Register calculator tools (multiple instances of the same tool)
+for i in range(NUM_TOOLS):
+    tool_registry.register(calculator_tool, f"tool_{i}")
+
+# Register noisy tool
+tool_registry.register(noisy_text_generator)
+
+# Get Bedrock tool specifications
+AVAILABLE_TOOLS = tool_registry.get_bedrock_specs()
+
+# Update calculator tool descriptions to include tool number
+for i, tool_spec in enumerate(AVAILABLE_TOOLS[:NUM_TOOLS]):
+    tool_spec["toolSpec"]["description"] = f"Calculator tool {i} - performs mathematical calculations and arithmetic operations"
 
 def test_with_many_tools(prompt) -> list:
     """Test with many tools and handle full conversation flow with actual tool execution"""
@@ -156,8 +222,8 @@ def test_with_many_tools(prompt) -> list:
                                     tool_name = tool_use.get('name', 'unknown')
                                     tool_input = tool_use.get('input', {})
                                     
-                                    # Actually execute the tool
-                                    result = execute_tool(tool_name, tool_input)
+                                    # Execute tool using registry
+                                    result = tool_registry.execute(tool_name, tool_input)
                                     
                                     tool_results.append({
                                         "toolResult": {
