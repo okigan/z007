@@ -12,6 +12,7 @@ import subprocess
 import select
 import time
 import colorlog
+import anyio
 
 from pathlib import Path
 from typing import get_type_hints
@@ -66,12 +67,12 @@ class ToolRegistry:
             time.sleep(0.5)
             
             if return_code := process.poll() is not None:
-                logger.error(f"✗ MCP '{name}' failed to start with return code {return_code}")
+                logger.error(f"MCP '{name}' failed to start with return code {return_code}")
                 return
 
             # Check if stdin is available
             if process.stdin is None or process.stdout is None:
-                logger.error(f"✗ MCP '{name}' stdin or stdout not available")
+                logger.error(f"MCP '{name}' stdin or stdout not available")
                 return
             
             self.mcp_servers[name] = process
@@ -111,24 +112,72 @@ class ToolRegistry:
                 if process.poll() is not None:
                     break
             
-            logger.warning(f"✗ MCP '{name}' timeout")
+            logger.error(f"MCP '{name}' timeout")
         except Exception as e:
-            logger.error(f"✗ MCP '{name}' error: {e}")
+            logger.error(f"MCP '{name}' error: {e}")
     
-    def execute(self, tool_name: str, tool_input: dict) -> str:
-        """Execute tool (local or MCP)"""
+    async def execute(self, tool_name: str, tool_input: dict) -> str:
+        """Execute tool (local or MCP) asynchronously"""
         if tool_name in self.mcp_tools:
-            return self._execute_mcp(tool_name, tool_input)
+            return await self._execute_mcp_async(tool_name, tool_input)
         elif tool_name in self.tools:
             func = self.tools[tool_name]
             sig = inspect.signature(func)
             kwargs = {p: tool_input.get(p) for p in sig.parameters.keys() if p in tool_input}
-            return func(**kwargs)
+            # Run sync function in thread using AnyIO  
+            def call_with_kwargs():
+                return func(**kwargs)
+            return await anyio.to_thread.run_sync(call_with_kwargs)  # type: ignore
         else:
             return f"Error: Unknown tool {tool_name}"
     
     def _execute_mcp(self, tool_name: str, tool_input: dict) -> str:
         """Execute MCP tool"""
+        try:
+            server_name = self.mcp_tools[tool_name]
+            process = self.mcp_servers[server_name]
+            
+            request = {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": tool_input}
+            }
+            
+            process.stdin.write(json.dumps(request) + "\n")
+            process.stdin.flush()
+            
+            # Simple timeout response reading
+            start_time = time.time()
+            while time.time() - start_time < 10:
+                if select.select([process.stdout], [], [], 0.1)[0]:
+                    try:
+                        response = json.loads(process.stdout.readline())
+                        if "result" in response:
+                            content = response["result"].get("content", [])
+                            if content:
+                                return str(content[0].get("text", content[0]))
+                            return "No content"
+                        elif "error" in response:
+                            return f"MCP Error: {response['error'].get('message', 'Unknown')}"
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+                if process.poll() is not None:
+                    break
+            return f"Timeout: {tool_name}"
+        except Exception as e:
+            return f"Error: {e}"
+
+    async def _execute_mcp_async(self, tool_name: str, tool_input: dict) -> str:
+        """Execute MCP tool asynchronously"""
+        try:
+            # Run the sync MCP communication using AnyIO
+            return await anyio.to_thread.run_sync(self._execute_mcp_sync, tool_name, tool_input)  # type: ignore
+        except Exception as e:
+            return f"Error: {e}"
+
+    def _execute_mcp_sync(self, tool_name: str, tool_input: dict) -> str:
+        """Synchronous MCP execution for thread pool"""
         try:
             server_name = self.mcp_tools[tool_name]
             process = self.mcp_servers[server_name]
@@ -227,8 +276,8 @@ class ToolRegistry:
         self.mcp_tools.clear()
 
 
-def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolRegistry) -> list:
-    """Run conversation with Bedrock"""
+async def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolRegistry) -> list:
+    """Run conversation with Bedrock - async tool execution using AnyIO"""
     bedrock = boto3.client("bedrock-runtime")
     
     try:
@@ -239,10 +288,13 @@ def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolReg
         available_tools = tool_registry_instance.get_bedrock_specs()
         
         for _ in range(5):  # Max 5 turns
-            response = bedrock.converse(
-                modelId=model_id,
-                messages=messages,
-                toolConfig={"tools": available_tools, "toolChoice": {"any": {}}}
+            # Run bedrock call in thread using AnyIO
+            response = await anyio.to_thread.run_sync(  # type: ignore
+                lambda: bedrock.converse(
+                    modelId=model_id,
+                    messages=messages,
+                    toolConfig={"tools": available_tools, "toolChoice": {"any": {}}}
+                )
             )
             responses.append(response)
             
@@ -254,21 +306,37 @@ def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolReg
                     messages.append(assistant_msg)
                     content = assistant_msg.get('content', [])
                     
-                    # Execute tools
-                    tool_results = []
+                    # Execute tools concurrently using AnyIO
+                    tool_calls = []
                     for item in content:
                         if isinstance(item, dict) and 'toolUse' in item:
                             tool_use = item['toolUse']
-                            result = tool_registry_instance.execute(tool_use.get('name'), tool_use.get('input', {}))
-                            tool_results.append({
-                                "toolResult": {
-                                    "toolUseId": tool_use.get('toolUseId'),
-                                    "content": [{"text": result}]
-                                }
-                            })
+                            tool_calls.append((
+                                tool_use.get('name'),
+                                tool_use.get('input', {}),
+                                tool_use.get('toolUseId')
+                            ))
                     
-                    if tool_results:
-                        messages.append({"role": "user", "content": tool_results})
+                    if tool_calls:
+                        # Execute all tools concurrently using AnyIO task group
+                        results = []  # Initialize results list
+                        
+                        async with anyio.create_task_group() as tg:
+                            async def execute_and_collect(name, input_data, use_id):
+                                result = await tool_registry_instance.execute(name, input_data)
+                                results.append({
+                                    "toolResult": {
+                                        "toolUseId": use_id,
+                                        "content": [{"text": result}]
+                                    }
+                                })
+                            
+                            # Start all tool executions concurrently
+                            for name, input_data, use_id in tool_calls:
+                                tg.start_soon(execute_and_collect, name, input_data, use_id)
+                        
+                        # All tasks are done, results contains all tool results
+                        messages.append({"role": "user", "content": results})
                     else:
                         break
                 else:
@@ -375,7 +443,7 @@ TEST_CASES = [
     # "First call noisy_text_generator with request 'sample output', then calculate 15 * 23 using tool_0. Both tools must be used."
 ]
 
-def main():
+async def async_main():
     logger.info("=== Streamlined Tool Stress Test ===")
     logger.info(f"Model: {MODEL_ID}")
     
@@ -396,7 +464,7 @@ def main():
             logger.info(f"--- Test {i+1} ---")
             logger.info(f"Prompt: {test_case}")
             
-            responses = run_conversation(test_case, MODEL_ID, tool_registry)
+            responses = await run_conversation(test_case, MODEL_ID, tool_registry)
             last_response = responses[-1] if responses else {}
             
             logger.info(f"Answer: {extract_final_answer(last_response)}")
@@ -413,6 +481,9 @@ def main():
         
     finally:
         tool_registry.cleanup()
+
+def main():
+    anyio.run(async_main)
 
 if __name__ == "__main__":
     main()
