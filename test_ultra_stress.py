@@ -4,10 +4,8 @@ Streamlined test to check if models call non-existent tools when overwhelmed.
 Provides many tools and checks if the model tries to call tools that don't exist.
 """
 
-import boto3
 import json
 import inspect
-import logging
 import subprocess
 import select
 import time
@@ -16,15 +14,15 @@ import anyio
 
 from pathlib import Path
 from typing import get_type_hints, Any, Callable
+from boto3.session import Session
 
 # Set up colored logging
-colorlog.basicConfig(level=logging.INFO, format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
+colorlog.basicConfig(format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
 logger = colorlog.getLogger(__name__)
 
-MODEL_ID = "openai.gpt-oss-20b-1:0"
 
 class ToolRegistry:
-    """Streamlined registry for both local and MCP tools"""
+    """Streamlined registry for both local and MCP tools with context manager support"""
     
     def __init__(self) -> None:
         self.tools: dict[str, Callable[..., Any]] = {}  # {tool_name: function}
@@ -32,19 +30,30 @@ class ToolRegistry:
         self.mcp_servers: dict[str, subprocess.Popen[str]] = {}  # {server_name: process}
         self.mcp_tools: dict[str, str] = {}  # {tool_name: server_name}
     
-    def register(self, func: Callable[..., Any], **metadata: Any) -> "ToolRegistry":
+    def __enter__(self) -> 'ToolRegistry':
+        """Context manager entry"""
+        return self
+    
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> None:
+        """Context manager exit - automatically cleanup resources"""
+        try:
+            self.cleanup()
+        except Exception as e:
+            logger.error(f"Error during context manager cleanup: {e}")
+            # Don't suppress exceptions from the with block
+    
+    def register(self, func: Callable[..., Any], **metadata: Any):
         """Register a function as a tool"""
         self.tools[func.__name__] = func
         if metadata:
             self.tool_metadata[func.__name__] = metadata
-        return self
     
-    def load_mcp_config(self, config_path: str) -> "ToolRegistry":
+    def load_mcp_config(self, config_path: str):
         """Load MCP servers from config file"""
         try:
             if not Path(config_path).exists():
                 return self
-            
+
             with open(config_path) as f:
                 config = json.load(f)
             
@@ -54,11 +63,8 @@ class ToolRegistry:
                 if command:
                     full_cmd = [command] + args if isinstance(command, str) else command + args
                     self._start_mcp_server(name, full_cmd)
-            
-            return self
         except Exception as e:
             logger.error(f"MCP config error: {e}")
-            return self
     
     def _start_mcp_server(self, name: str, command: list[str]) -> None:
         """Start MCP server and load tools"""
@@ -274,105 +280,118 @@ class ToolRegistry:
     
     def cleanup(self) -> None:
         """Cleanup MCP servers"""
-        for name, process in self.mcp_servers.items():
+        for process in self.mcp_servers.values():
             try:
                 process.terminate()
                 process.wait(timeout=2)
             except Exception:
+                logger.error(f"Error terminating MCP server process {process.pid}")
                 pass
         self.mcp_servers.clear()
         self.mcp_tools.clear()
 
 
-async def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolRegistry) -> list[dict[str, Any]]:
+async def run_conversation(prompt: str, model_id: str, tool_registry: ToolRegistry, max_turns: int = 5) -> list[Any]:
     """Run conversation with Bedrock - async tool execution using AnyIO"""
-    bedrock = boto3.client("bedrock-runtime")
+    bedrock = Session().client("bedrock-runtime")
     
-    try:
-        messages: list[dict[str, Any]] = [{"role": "user", "content": [{"text": prompt}]}]
-        responses: list[dict[str, Any]] = []
+    # Start with initial user message
+    messages = [{"role": "user", "content": [{"text": prompt}]}]
+    responses = []
+    
+    # Get tools in the format Bedrock expects
+    available_tools_raw = tool_registry.get_bedrock_specs()
+    available_tools = [{"toolSpec": tool["toolSpec"]} for tool in available_tools_raw]
+
+    for _ in range(max_turns):  # Max turns
+        tool_config = {
+            "tools": available_tools,
+            "toolChoice": {"any": {}}
+        }
         
-        # Get current tools (including any MCP tools loaded)
-        available_tools = tool_registry_instance.get_bedrock_specs()
+        # Make bedrock call
+        response = await anyio.to_thread.run_sync(  # type: ignore
+            lambda: bedrock.converse(
+                modelId=model_id,
+                messages=messages,  # type: ignore
+                toolConfig=tool_config  # type: ignore
+            )
+        )
+        responses.append(response)
         
-        for _ in range(5):  # Max 5 turns
-            # Run bedrock call in thread using AnyIO
-            def bedrock_call() -> Any:  # AWS SDK doesn't have precise return types
-                return bedrock.converse(
-                    modelId=model_id,
-                    messages=messages,
-                    toolConfig={"tools": available_tools, "toolChoice": {"any": {}}}
-                )
-            
-            response = await anyio.to_thread.run_sync(bedrock_call)  # type: ignore
-            responses.append(response)
-            
-            stop_reason = response.get('stopReason')
-            if stop_reason == 'tool_use':
-                # Handle tool calls
-                assistant_msg = response.get('output', {}).get('message')
-                if assistant_msg:
-                    messages.append(assistant_msg)
-                    content = assistant_msg.get('content', [])
+        # Check if we need to handle tool calls
+        stop_reason = response['stopReason']
+        if stop_reason == 'tool_use':
+            # Get the assistant's message with tool calls
+            output = response["output"]
+            assistant_msg = output["message"]
+
+            if assistant_msg:
+                # Add assistant message to conversation
+                messages.append({
+                    "role": assistant_msg["role"],
+                    "content": assistant_msg["content"]
+                })
+                
+                # Extract tool calls
+                tool_calls = []
+                for item in assistant_msg['content']:
+                    if 'toolUse' in item:
+                        tool_use = item['toolUse']
+                        name = tool_use['name']
+                        input_data = tool_use['input']
+                        use_id = tool_use['toolUseId']
+
+                        if name and use_id:
+                            tool_calls.append((name, input_data, use_id))
+                
+                if tool_calls:
+                    # Execute all tools concurrently
+                    results = []
                     
-                    # Execute tools concurrently using AnyIO
-                    tool_calls = []
-                    for item in content:
-                        if isinstance(item, dict) and 'toolUse' in item:
-                            tool_use = item['toolUse']
-                            tool_calls.append((
-                                tool_use.get('name'),
-                                tool_use.get('input', {}),
-                                tool_use.get('toolUseId')
-                            ))
+                    async def execute_and_collect(name: str, input_data: dict[str, Any], use_id: str) -> None:
+                        result = await tool_registry.execute(name, input_data)
+                        results.append({
+                            "toolResult": {
+                                "toolUseId": use_id,
+                                "content": [{"text": result}]
+                            }
+                        })
                     
-                    if tool_calls:
-                        # Execute all tools concurrently using AnyIO task group
-                        results = []  # Initialize results list
-                        
-                        async with anyio.create_task_group() as tg:
-                            async def execute_and_collect(name: str, input_data: dict[str, Any], use_id: str) -> None:
-                                result = await tool_registry_instance.execute(name, input_data)
-                                results.append({
-                                    "toolResult": {
-                                        "toolUseId": use_id,
-                                        "content": [{"text": result}]
-                                    }
-                                })
-                            
-                            # Start all tool executions concurrently
-                            for name, input_data, use_id in tool_calls:
-                                tg.start_soon(execute_and_collect, name, input_data, use_id)
-                        
-                        # All tasks are done, results contains all tool results
-                        messages.append({"role": "user", "content": results})
-                    else:
-                        break
+                    async with anyio.create_task_group() as tg:
+                        for name, input_data, use_id in tool_calls:
+                            tg.start_soon(execute_and_collect, name, input_data, use_id)
+                    
+                    # Add tool results to conversation
+                    messages.append({
+                        "role": "user", 
+                        "content": results
+                    })
                 else:
-                    # log the issue
-                    logger.debug(f"Assistant message not found in response: {response}")
                     break
             else:
-                # log the unexpected stop reason, and whole response as one liner
-                logger.debug(f"Unexpected stop reason: {stop_reason}, Full response: {response}")
+                logger.debug(f"No assistant message found in response: {response}")
                 break
-        
-        return responses
-    except Exception as e:
-        return [{"error": str(e)}]
+        else:
+            logger.debug(f"Conversation ended with stop reason: {stop_reason}")
+            break
+    
+    return responses
 
-def extract_final_answer(response: dict[str, Any]) -> str:
+def extract_final_answer(response: Any) -> str:
     """Extract final answer from response"""
     try:
         content = response.get('output', {}).get('message', {}).get('content', [])
         for item in content:
             if isinstance(item, dict) and 'text' in item:
-                return item['text'][:200] + ("..." if len(item['text']) > 200 else "")
+                text = item['text']
+                if isinstance(text, str):
+                    return text
         return "No final answer found"
     except Exception:
         return "No final answer found"
 
-def get_called_tools(responses: list[dict[str, Any]]) -> list[str]:
+def get_called_tools(responses: list[Any]) -> list[str]:
     """Get list of called tools"""
     tools: list[str] = []
     for response in responses:
@@ -380,9 +399,11 @@ def get_called_tools(responses: list[dict[str, Any]]) -> list[str]:
             content = response.get('output', {}).get('message', {}).get('content', [])
             for item in content:
                 if isinstance(item, dict) and 'toolUse' in item:
-                    tool_name = item['toolUse'].get('name')
-                    if tool_name and isinstance(tool_name, str):
-                        tools.append(tool_name)
+                    tool_use = item['toolUse']
+                    if tool_use:
+                        tool_name = tool_use.get('name')
+                        if tool_name:
+                            tools.append(str(tool_name))
         except Exception:
             continue
     return tools
@@ -458,43 +479,34 @@ TEST_CASES = [
 ]
 
 async def async_main() -> None:
+    model_id = "openai.gpt-oss-20b-1:0"
+
     logger.info("=== Streamlined Tool Stress Test ===")
-    logger.info(f"Model: {MODEL_ID}")
-    
-    # Create and configure tool registry
-    tool_registry = create_tool_registry()
-    
-    # Load MCP servers
-    tool_registry.load_mcp_config("./.vscode/mcp.json")
-    
-    # Show tool counts
-    local_count = len(tool_registry.tools)
-    mcp_server_count = len(tool_registry.mcp_servers)
-    mcp_tools_count = len(tool_registry.mcp_tools)
-    logger.info(f"Tools: {local_count} local + {mcp_tools_count} MCP from {mcp_server_count} servers = {local_count + mcp_tools_count} total")
-    
-    try:
+    logger.info(f"Model: {model_id}")
+
+    # Create and configure tool registry using context manager
+    with create_tool_registry() as tool_registry:
+        tool_registry.load_mcp_config("./.vscode/mcp.json")
+        
+        # Show tool counts
+        local_count = len(tool_registry.tools)
+        mcp_server_count = len(tool_registry.mcp_servers)
+        mcp_tools_count = len(tool_registry.mcp_tools)
+        logger.info(f"Tools: {local_count} local + {mcp_tools_count} MCP from {mcp_server_count} servers = {local_count + mcp_tools_count} total")
+        
         for i, test_case in enumerate(TEST_CASES):
             logger.info(f"--- Test {i+1} ---")
             logger.info(f"Prompt: {test_case}")
             
-            responses = await run_conversation(test_case, MODEL_ID, tool_registry)
-            last_response = responses[-1] if responses else {}
+            responses = await run_conversation(test_case, model_id, tool_registry)
+            last_response = responses[-1] if responses else None
             
-            logger.info(f"Answer: {extract_final_answer(last_response)}")
-            
-            called_tools = get_called_tools(responses)
-            if called_tools:
-                logger.info(f"Tools: {', '.join(called_tools)}")
-            else:
-                logger.info("Tools: None")
-            
-            logger.info("=" * 60)
-        
-        logger.info(f"Completed {len(TEST_CASES)} tests")
-        
-    finally:
-        tool_registry.cleanup()
+            print(f"Answer: {extract_final_answer(last_response) if last_response else 'No response'}")
+            print(f"Tools: {', '.join(get_called_tools(responses)) if get_called_tools(responses) else 'None'}")
+            print("=" * 60)
+
+        print(f"Completed {len(TEST_CASES)} tests")
+        # Cleanup happens automatically when exiting the context manager
 
 def main() -> None:
     anyio.run(async_main)

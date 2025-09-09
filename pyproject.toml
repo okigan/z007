@@ -18,7 +18,38 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "boto3-stubs>=1.40.23",
+    "mypy-boto3-bedrock-runtime>=1.40.0",
+    "mypy-boto3-bedrock>=1.40.0",
+    "boto3-stubs[essential]>=1.40.0",
     "mypy>=1.17.1",
     "ruff>=0.12.11",
 ]
+
+[tool.mypy]
+# Basic strict settings we can achieve
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+disallow_any_generics = true
+check_untyped_defs = true
+no_implicit_reexport = true
+
+# We can be more strict now with better type stubs
+disallow_untyped_defs = false
+disallow_any_expr = false
+disallow_any_decorated = false
+disallow_any_explicit = false
+disallow_subclassing_any = false
+
+# Third-party libraries without proper stubs
+[[tool.mypy.overrides]]
+module = "colorlog"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "anyio.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "select"
+ignore_missing_imports = true
