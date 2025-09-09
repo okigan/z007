@@ -514,33 +514,6 @@ class Agent:
         return responses
 
 
-# Convenience functions for simple use cases
-async def quick_ask(
-    question: str,
-    model_id: str = "openai.gpt-oss-20b-1:0",
-    tools: list[Callable[..., Any]] | None = None,
-    system_prompt: str | None = None
-) -> str:
-    """
-    Quick way to ask a single question
-    
-    Args:
-        question: The question to ask
-        model_id: LLM model ID to use
-        tools: Optional list of tools
-        system_prompt: Optional system prompt
-        
-    Returns:
-        The agent's response
-    """
-    async with Agent(
-        model_id=model_id, 
-        tools=tools,
-        system_prompt=system_prompt
-    ) as agent:
-        return await agent.run(question)
-
-
 def create_calculator_tool() -> Callable[..., str]:
     """Create a basic calculator tool function"""
     def calculator_tool(expression: str) -> str:
