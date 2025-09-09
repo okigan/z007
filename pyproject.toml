@@ -6,13 +6,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["z007"]
-include = [
-    "mcp.json",
-]
 
 [project]
 name = "z007"
-version = "0.1.0"
+version = "0.1.1"
 description = "Micro agent with tool support and MCP integration."
 readme = "README.md"
 license = { text = "MIT" }
