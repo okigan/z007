@@ -19,13 +19,17 @@ A lightweight and readable agent for interacting with LLM on AWS Bedrock with to
 ### Install and run with uvx (recommended)
 
 ```bash
-# Install and run directly - fastest way to start!
+# Install and run directly with AWS_PROFILE configured - fastest way to start!
 uvx z007
 
-# Or install globally  
+# Or install globally with AWS_PROFILE configured
 uv tool install z007
 z007
 ```
+
+
+![demo gif](./doc/demo.gif "Optional title text")
+
 
 ### Install as Python package
 
