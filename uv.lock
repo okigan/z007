@@ -999,7 +999,7 @@ dependencies = [
     { name = "rich" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "boto3-stubs", extra = ["essential"] },
     { name = "build" },
@@ -1010,39 +1010,24 @@ dev = [
     { name = "twine" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "boto3-stubs", extra = ["essential"] },
-    { name = "mypy" },
-    { name = "mypy-boto3-bedrock" },
-    { name = "mypy-boto3-bedrock-runtime" },
-    { name = "ruff" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.10.0" },
     { name = "boto3" },
-    { name = "boto3-stubs", extras = ["essential"], marker = "extra == 'dev'", specifier = ">=1.40.0" },
     { name = "botocore" },
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.0.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.17.1" },
-    { name = "mypy-boto3-bedrock", marker = "extra == 'dev'", specifier = ">=1.40.0" },
-    { name = "mypy-boto3-bedrock-runtime", marker = "extra == 'dev'", specifier = ">=1.40.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "rich", specifier = ">=14.1.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.11" },
-    { name = "twine", marker = "extra == 'dev'", specifier = ">=4.0.0" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "boto3-stubs", extras = ["essential"], specifier = ">=1.40.0" },
+    { name = "build", specifier = ">=1.0.0" },
     { name = "mypy", specifier = ">=1.17.1" },
     { name = "mypy-boto3-bedrock", specifier = ">=1.40.0" },
     { name = "mypy-boto3-bedrock-runtime", specifier = ">=1.40.0" },
     { name = "ruff", specifier = ">=0.12.11" },
+    { name = "twine", specifier = ">=4.0.0" },
 ]
 
 [[package]]

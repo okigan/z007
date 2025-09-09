@@ -5,14 +5,15 @@ Main test module for stress testing agent tools.
 
 import json
 import logging
-import anyio
-
 from pathlib import Path
 from typing import Any, Callable
+
+import anyio
+
 from z007 import Agent, create_calculator_tool
 
 # Set up logging
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -21,12 +22,12 @@ def get_called_tools(responses: list[Any]) -> list[str]:
     tools: list[str] = []
     for response in responses:
         try:
-            content = response.get('output', {}).get('message', {}).get('content', [])
+            content = response.get("output", {}).get("message", {}).get("content", [])
             for item in content:
-                if isinstance(item, dict) and 'toolUse' in item:
-                    tool_use = item['toolUse']
+                if isinstance(item, dict) and "toolUse" in item:
+                    tool_use = item["toolUse"]
                     if tool_use:
-                        tool_name = tool_use.get('name')
+                        tool_name = tool_use.get("name")
                         if tool_name:
                             tools.append(str(tool_name))
         except Exception:
@@ -37,7 +38,7 @@ def get_called_tools(responses: list[Any]) -> list[str]:
 def create_tools() -> list[Callable[..., Any]]:
     """Create and return list of tool functions"""
     tools = []
-    
+
     # Use the built-in calculator tool from zappy
     calculator_tool = create_calculator_tool()
 
@@ -45,11 +46,16 @@ def create_tools() -> list[Callable[..., Any]]:
         """Generate text with various non-alphanumeric characters"""
         import random
         import string
-        
+
         # Generate random noise
-        noise_chars = ''.join(random.choices(string.ascii_letters + string.digits + '!@#$%^&*()[]{}|\\:";\'<>?,./~`', k=50))
+        noise_chars = "".join(
+            random.choices(
+                string.ascii_letters + string.digits + "!@#$%^&*()[]{}|\\:\";'<>?,./~`",
+                k=50,
+            )
+        )
         unicode_chars = "¡™£¢∞§¶•ªº–≠œ∑´®†¥¨ˆøπ«åß∂ƒ©˙∆˚¬…æΩ≈ç√∫˜µ≤≥÷"
-        
+
         return f"""NOISE_START_{noise_chars}_NOISE_MID
 Generated text based on request: {request}
 EXTRA_CHARS: {unicode_chars}
@@ -62,24 +68,30 @@ FINAL_NOISE_BLOCK_{noise_chars}_COMPLETE"""
     tools.extend([calculator_tool, noisy_text_generator])
 
     # Generate 50 dummy calculator tools
-    NUM_TOOLS = 50
-    for i in range(NUM_TOOLS):
+    num_tools = 50
+    for i in range(num_tools):
+
         def make_tool(tool_id: int) -> Callable[[str], str]:
             def tool_func(expression: str) -> str:
                 try:
                     # Basic safety check
-                    if any(char in expression for char in ['import', 'exec', 'eval', '__']):
+                    if any(
+                        char in expression for char in ["import", "exec", "eval", "__"]
+                    ):
                         return "Error: Invalid expression"
                     result: Any = eval(expression)  # eval can return Any type
                     return str(result)
                 except Exception as e:
                     return f"Error: {e}"
+
             tool_func.__name__ = f"tool_{tool_id}"
-            tool_func.__doc__ = f"Calculator tool {tool_id} - performs mathematical calculations"
+            tool_func.__doc__ = (
+                f"Calculator tool {tool_id} - performs mathematical calculations"
+            )
             return tool_func
-        
+
         tools.append(make_tool(i))
-    
+
     return tools
 
 
@@ -88,7 +100,7 @@ def load_mcp_config_from_file(config_path: str) -> dict[str, Any] | None:
     try:
         if not Path(config_path).exists():
             return None
-        
+
         with open(config_path) as f:
             return json.load(f)
     except Exception as e:
@@ -124,24 +136,31 @@ async def async_main() -> None:
         model_id=model_id,
         system_prompt="You are a helpful assistant with access to various tools.",
         tools=tools,
-        mcp_config=load_mcp_config_from_file(mcp_config_filepath) if Path(mcp_config_filepath).exists() else None,
-        max_turns=5
+        mcp_config=load_mcp_config_from_file(mcp_config_filepath)
+        if Path(mcp_config_filepath).exists()
+        else None,
+        max_turns=5,
     ) as agent:
-        
         # Show tool counts
         local_count, mcp_server_count, mcp_tools_count = agent.get_tool_counts()
-        logger.info(f"Tools: {local_count} local + {mcp_tools_count} MCP from {mcp_server_count} servers = {local_count + mcp_tools_count} total")
-        
+        logger.info(
+            f"Tools: {local_count} local + {mcp_tools_count} MCP from {mcp_server_count} servers = {local_count + mcp_tools_count} total"
+        )
+
         for i, test_case in enumerate(TEST_CASES):
-            logger.info(f"--- Test {i+1} ---")
+            logger.info(f"--- Test {i + 1} ---")
             logger.info(f"Prompt: {test_case}")
-            
+
             # Use the new Agent API
             responses = await agent.run_conversation(test_case)
             last_response = responses[-1] if responses else None
-            
-            print(f"Answer: {Agent.extract_final_answer(last_response) if last_response else 'No response'}")
-            print(f"Tools: {', '.join(get_called_tools(responses)) if get_called_tools(responses) else 'None'}")
+
+            print(
+                f"Answer: {Agent.extract_final_answer(last_response) if last_response else 'No response'}"
+            )
+            print(
+                f"Tools: {', '.join(get_called_tools(responses)) if get_called_tools(responses) else 'None'}"
+            )
             print("=" * 60)
 
         print(f"Completed {len(TEST_CASES)} tests")
