@@ -198,8 +198,8 @@ tool_registry.register(
 # Get Bedrock tool specifications
 AVAILABLE_TOOLS = tool_registry.get_bedrock_specs()
 
-def test_with_many_tools(prompt) -> list:
-    """Test with many tools and handle full conversation flow with actual tool execution"""
+def run_conversation_with_tools(prompt) -> list:
+    """Run a complete conversation with tool execution until completion"""
     bedrock = boto3.client("bedrock-runtime")
     
     try:
@@ -369,7 +369,7 @@ def main():
         print(f"Prompt: {test_case}")
         print()
         
-        responses = test_with_many_tools(test_case)
+        responses = run_conversation_with_tools(test_case)
         last_response = responses[-1] if responses else {"error": "No responses received"}
 
         # print(f"Response: {last_response}")
