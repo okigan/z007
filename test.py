@@ -9,7 +9,7 @@ import colorlog
 
 from pathlib import Path
 from typing import Any, Callable
-from zappy import Agent, create_calculator_tool
+from z007 import Agent, create_calculator_tool
 
 # Set up colored logging
 colorlog.basicConfig(format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')

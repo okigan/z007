@@ -1,10 +1,10 @@
-# zappy ⚡ Fast Micro Agent
+# z007 ⚡ Fast Micro Agent
 
 A lightning-fast, lightweight agent for interacting with LLM providers with built-in tool support and MCP (Model Context Protocol) integration.
 
 ## Features
 
-- ⚡ **Lightning Fast**: Quick setup with `uvx zappy` - start chatting instantly  
+- ⚡ **Lightning Fast**: Quick setup with `uvx z007` - start chatting instantly  
 - 🔧 **Tool Support**: Built-in calculator and custom tool integration
 - 🔌 **MCP Integration**: Connect to Model Context Protocol servers
 - 🎯 **Multiple Providers**: Currently supports AWS Bedrock (more coming soon)
@@ -17,17 +17,17 @@ A lightning-fast, lightweight agent for interacting with LLM providers with buil
 
 ```bash
 # Install and run directly - fastest way to start!
-uvx zappy
+uvx z007
 
 # Or install globally  
-uvx install zappy
-zappy
+uvx install z007
+z007
 ```
 
 ### Install as Python package
 
 ```bash
-pip install zappy
+pip install z007
 ```
 
 ## Usage
@@ -36,13 +36,13 @@ pip install zappy
 
 ```bash
 # Start interactive chat
-zappy
+z007
 
 # With custom model (AWS Bedrock)
-zappy --model-id "anthropic.claude-3-sonnet-20240229-v1:0"
+z007 --model-id "anthropic.claude-3-sonnet-20240229-v1:0"
 
 # With MCP configuration
-zappy --mcp-config .vscode/mcp.json
+z007 --mcp-config .vscode/mcp.json
 ```
 
 ### Python API
@@ -51,7 +51,7 @@ zappy --mcp-config .vscode/mcp.json
 
 ```python
 import asyncio
-from zappy import Agent
+from z007 import Agent
 
 async def main():
     async with Agent(model_id="openai.gpt-oss-20b-1:0") as agent:
@@ -65,7 +65,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from zappy import Agent, create_calculator_tool
+from z007 import Agent, create_calculator_tool
 
 async def main():
     calculator = create_calculator_tool()
@@ -83,7 +83,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from zappy import Agent
+from z007 import Agent
 
 async def main():
     async with Agent(
@@ -102,7 +102,7 @@ Create your own tools by writing simple Python functions:
 
 ```python
 import asyncio
-from zappy import Agent
+from z007 import Agent
 
 def weather_tool(city: str) -> str:
     """Get weather information for a city"""
@@ -152,16 +152,16 @@ Connect to Model Context Protocol servers for advanced capabilities:
 }
 ```
 
-2. Use with zappy:
+2. Use with z007:
 
 ```bash
-zappy --mcp-config .vscode/mcp.json
+z007 --mcp-config .vscode/mcp.json
 ```
 
 Or in Python:
 
 ```python
-from zappy import Agent
+from z007 import Agent
 
 async with Agent(
     model_id="openai.gpt-oss-20b-1:0",
@@ -190,7 +190,7 @@ Current AWS Bedrock models:
 
 ## Interactive Commands
 
-When running `zappy` in interactive mode:
+When running `z007` in interactive mode:
 
 - `/help` - Show help
 - `/tools` - List available tools  
@@ -199,22 +199,60 @@ When running `zappy` in interactive mode:
 
 ## Development
 
+### Setup
 ```bash
 # Clone and setup
-git clone <repo-url>
-cd zappy-repo
-uv install
+git clone https://github.com/okigan/z007.git
+cd z007
+uv sync
+```
 
-# Run locally
-uv run python -m zappy.main
+### Running locally
+```bash
+# Run the CLI
+uv run z007
+
+# Run with specific model
+uv run z007 --model-id "anthropic.claude-3-sonnet-20240229-v1:0"
 
 # Run examples
-python examples.py
+uv run python examples.py
+
+# Run tests
+uv run python test.py
+```
+
+### Building and Publishing
+```bash
+# Build the package
+uv build
+
+# Install locally for testing
+uv pip install dist/z007-0.1.0-py3-none-any.whl
+
+# Publish to Test PyPI (recommended first)
+uv publish --repository testpypi
+
+# Publish to PyPI
+uv publish
+```
+
+### Development Tools
+```bash
+# Type checking
+uv run mypy z007/
+
+# Code formatting and linting
+uv run ruff check z007/
+uv run ruff format z007/
+
+# Install in editable mode for development
+uv pip install -e .
 ```
 
 ## API Reference
 
-### `zappy.Agent`
+### `z007.Agent`
 
 Main agent class for LLM interactions.
 
@@ -229,7 +267,7 @@ async with Agent(
     response = await agent.run("Your question")
 ```
 
-### `zappy.create_calculator_tool()`
+### `z007.create_calculator_tool()`
 
 Creates a basic calculator tool function.
 
@@ -249,4 +287,4 @@ MIT License
 
 ---
 
-**zappy** ⚡ Fast, lightweight, powerful. Get things done quickly! 🚀
+**z007** ⚡ Fast, lightweight, powerful. Get things done quickly! 🚀
