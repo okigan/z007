@@ -42,7 +42,7 @@ run:	## Run the CLI tool
 	uv run z007
 
 publish-test:	## Publish to Test PyPI
-	uv publish --repository testpypi
+	uv publish --publish-url https://test.pypi.org/legacy/
 
 publish:	## Publish to PyPI
 	uv publish

@@ -1,13 +1,13 @@
 # z007 ⚡ Fast Micro Agent
 
-A lightning-fast, lightweight agent for interacting with LLM providers with built-in tool support and MCP (Model Context Protocol) integration.
+A lightweight and readable agent for interacting with LLM on AWS Bedrock with tool and MCP (Model Context Protocol) support.
 
 ## Features
 
-- ⚡ **Lightning Fast**: Quick setup with `uvx z007` - start chatting instantly  
+- ⚡ **Lightning Fast**: Quick setup with `uvx z007`  with `AWS_PROFILE=<your profile>` env and start chatting instantly  
+- ⚡ **Simple Install**: Quick install  `uv tool install z007` and start chatting instantly `z007` with `AWS_PROFILE=<your profile>` env
 - 🔧 **Tool Support**: Built-in calculator and custom tool integration
 - 🔌 **MCP Integration**: Connect to Model Context Protocol servers
-- 🎯 **Multiple Providers**: Currently supports AWS Bedrock (more coming soon)
 - 🐍 **Python API**: Easy integration into your Python projects
 - 🚀 **Async**: Fast, concurrent tool execution
 
@@ -20,7 +20,7 @@ A lightning-fast, lightweight agent for interacting with LLM providers with buil
 uvx z007
 
 # Or install globally  
-uvx install z007
+uv tool install z007
 z007
 ```
 
@@ -176,6 +176,8 @@ async with Agent(
 ### Environment Variables
 
 For AWS Bedrock (default provider):
+- `AWS_PROFILE`: AWS profile name
+  **or**
 - `AWS_REGION`: AWS region (default: us-east-1)
 - `AWS_ACCESS_KEY_ID`: AWS access key
 - `AWS_SECRET_ACCESS_KEY`: AWS secret key
@@ -184,8 +186,6 @@ For AWS Bedrock (default provider):
 
 Current AWS Bedrock models:
 - `openai.gpt-oss-20b-1:0` (default)
-- `meta.llama3-70b-instruct-v1:0`
-- `anthropic.claude-3-sonnet-20240229-v1:0`
 - Any AWS Bedrock model with tool support
 
 ## Interactive Commands
@@ -196,85 +196,6 @@ When running `z007` in interactive mode:
 - `/tools` - List available tools  
 - `/clear` - Clear conversation history
 - `/exit` - Exit
-
-## Development
-
-### Setup
-```bash
-# Clone and setup
-git clone https://github.com/okigan/z007.git
-cd z007
-uv sync
-```
-
-### Running locally
-```bash
-# Run the CLI
-uv run z007
-
-# Run with specific model
-uv run z007 --model-id "anthropic.claude-3-sonnet-20240229-v1:0"
-
-# Run examples
-uv run python examples.py
-
-# Run tests
-uv run python test.py
-```
-
-### Building and Publishing
-```bash
-# Build the package
-uv build
-
-# Install locally for testing
-uv pip install dist/z007-0.1.0-py3-none-any.whl
-
-# Publish to Test PyPI (recommended first)
-uv publish --repository testpypi
-
-# Publish to PyPI
-uv publish
-```
-
-### Development Tools
-```bash
-# Type checking
-uv run mypy z007/
-
-# Code formatting and linting
-uv run ruff check z007/
-uv run ruff format z007/
-
-# Install in editable mode for development
-uv pip install -e .
-```
-
-## API Reference
-
-### `z007.Agent`
-
-Main agent class for LLM interactions.
-
-```python
-async with Agent(
-    model_id="openai.gpt-oss-20b-1:0",
-    system_prompt=None,
-    tools=[],
-    mcp_config=None,
-    max_turns=10
-) as agent:
-    response = await agent.run("Your question")
-```
-
-### `z007.create_calculator_tool()`
-
-Creates a basic calculator tool function.
-
-```python
-calculator = create_calculator_tool()
-# Use with Agent
-```
 
 ## Requirements
 
