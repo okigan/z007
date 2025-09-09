@@ -418,7 +418,7 @@ class Agent:
 
     async def run(self, prompt: str) -> str:
         """Run a single conversation and return the final answer"""
-        responses = await self.run_conversation(prompt)
+        responses, _ = await self.run_conversation(prompt)
         return Agent.extract_final_answer(responses[-1]) if responses else "No response"
 
     @staticmethod
@@ -470,10 +470,22 @@ class Agent:
                 tg.start_soon(run_tool)
         return results
 
-    async def run_conversation(self, prompt: str) -> list[Any]:
-        """Run conversation with tool support - async tool execution using AnyIO"""
-        # Start with user message (system prompt will be passed separately)
-        messages = []
+    async def run_conversation(
+        self, prompt: str, conversation_history: list[dict[str, Any]] | None = None
+    ) -> tuple[list[Any], list[dict[str, Any]]]:
+        """Run conversation with tool support - async tool execution using AnyIO
+
+        Args:
+            prompt: The user's input message
+            conversation_history: Optional prior conversation history
+
+        Returns:
+            Tuple of (responses from LLM, updated conversation history)
+        """
+        # Start with provided conversation history or empty list
+        messages = conversation_history.copy() if conversation_history else []
+
+        # Add user message to conversation
         messages.append({"role": "user", "content": [{"text": prompt}]})
         responses = []
 
@@ -556,7 +568,7 @@ class Agent:
                 logger.error(f"Error in conversation turn {turn_num}: {e}")
                 break
 
-        return responses
+        return responses, messages
 
 
 def create_calculator_tool() -> Callable[..., str]:

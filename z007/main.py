@@ -180,7 +180,7 @@ async def async_main() -> None:
             print_help()
 
             # Main REPL loop
-            conversation_history = []
+            conversation_history = []  # Store conversation messages for the LLM
             while True:
                 try:
                     logger.info("[REPL] Waiting for user input...")
@@ -215,7 +215,7 @@ async def async_main() -> None:
                     # Process user message
                     print("[italic]Thinking...[/italic]")
                     logger.info("[REPL] Running agent conversation...")
-                    responses = await agent.run_conversation(user_input)
+                    responses, conversation_history = await agent.run_conversation(user_input, conversation_history)
                     last_response = responses[-1] if responses else None
 
                     # Extract and display answer
@@ -229,9 +229,6 @@ async def async_main() -> None:
                         logger.info(f"[REPL] Tools used: {', '.join(tools_used)}")
                         print(f"[magenta]Tools used:[/magenta] {', '.join(tools_used)}")
                     print()  # Add spacing
-
-                    # Store in conversation history for reference
-                    conversation_history.append({"user": user_input, "assistant": answer, "tools": tools_used})
 
                 except KeyboardInterrupt:
                     logger.info("[REPL] KeyboardInterrupt received.")
