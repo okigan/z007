@@ -198,19 +198,45 @@ tool_registry.register(
 # Get Bedrock tool specifications
 AVAILABLE_TOOLS = tool_registry.get_bedrock_specs()
 
+def _execute_tool_calls(content) -> list:
+    """Extract and execute tool calls from assistant message content"""
+    tool_results = []
+    for item in content:
+        if isinstance(item, dict) and 'toolUse' in item:
+            tool_use = item['toolUse']
+            tool_id = tool_use.get('toolUseId', 'unknown')
+            tool_name = tool_use.get('name', 'unknown')
+            tool_input = tool_use.get('input', {})
+            
+            # Execute tool using registry
+            result = tool_registry.execute(tool_name, tool_input)
+            
+            tool_results.append({
+                "toolResult": {
+                    "toolUseId": tool_id,
+                    "content": [{"text": result}]
+                }
+            })
+    return tool_results
+
+def _has_tool_calls(content) -> bool:
+    """Check if message content contains tool calls"""
+    return any(
+        isinstance(item, dict) and 'toolUse' in item 
+        for item in content if isinstance(content, list)
+    )
+
 def run_conversation_with_tools(prompt) -> list:
     """Run a complete conversation with tool execution until completion"""
     bedrock = boto3.client("bedrock-runtime")
     
     try:
-        # Initial conversation
         messages = [{"role": "user", "content": [{"text": prompt}]}]
-        
-        # Continue conversation until no more tool calls
-        max_turns = 5  # Prevent infinite loops
         all_responses = []
+        max_turns = 5  # Prevent infinite loops
         
         for turn in range(max_turns):
+            # Get response from Bedrock
             response = bedrock.converse(
                 modelId=MODEL_ID,
                 messages=messages,
@@ -219,66 +245,40 @@ def run_conversation_with_tools(prompt) -> list:
                     "toolChoice": {"any": {}}
                 }
             )
-            
             all_responses.append(response)
             
-            # Add assistant's response to conversation
-            if 'stopReason' in response:
-                if response['stopReason'] == 'tool_use':
-                    if 'output' in response and 'message' in response['output']:
-                        assistant_message = response['output']['message']
-                        messages.append(assistant_message)
-                        
-                        # Check if there are tool calls
-                        content = assistant_message.get('content', [])
-                        has_tool_calls = any(
-                            isinstance(item, dict) and 'toolUse' in item 
-                            for item in content if isinstance(content, list)
-                        )
-                        
-                        if has_tool_calls:
-                            # Execute actual tools
-                            tool_results = []
-                            for item in content:
-                                if isinstance(item, dict) and 'toolUse' in item:
-                                    tool_use = item['toolUse']
-                                    tool_id = tool_use.get('toolUseId', 'unknown')
-                                    tool_name = tool_use.get('name', 'unknown')
-                                    tool_input = tool_use.get('input', {})
-                                    
-                                    # Execute tool using registry
-                                    result = tool_registry.execute(tool_name, tool_input)
-                                    
-                                    tool_results.append({
-                                        "toolResult": {
-                                            "toolUseId": tool_id,
-                                            "content": [{"text": result}]
-                                        }
-                                    })
-                            
-                            # Add tool results to conversation
-                            if tool_results:
-                                messages.append({
-                                    "role": "user",
-                                    "content": tool_results
-                                })
-                        else:
-                            # No more tool calls, conversation is complete
-                            break
-                    else:
-                        # No valid response, break
-                        break
-                elif response['stopReason'] in ['end_turn', 'max_turns', 'model_complete']:
-                    print(f"Conversation ended due to {response['stopReason']}")
-                    break
-                else:
-                    print(f"No valid stopReason, breaking conversation: {response}")
-                    break
-            else:
+            # Handle response based on stop reason
+            stop_reason = response.get('stopReason')
+            if not stop_reason:
                 print(f"No valid response, breaking conversation: {response}")
                 break
+                
+            if stop_reason == 'tool_use':
+                # Process tool calls
+                assistant_message = response.get('output', {}).get('message')
+                if not assistant_message:
+                    break
+                    
+                messages.append(assistant_message)
+                content = assistant_message.get('content', [])
+                
+                if _has_tool_calls(content):
+                    tool_results = _execute_tool_calls(content)
+                    if tool_results:
+                        messages.append({
+                            "role": "user",
+                            "content": tool_results
+                        })
+                else:
+                    break  # No more tool calls
+                    
+            elif stop_reason in ['end_turn', 'max_turns', 'model_complete']:
+                print(f"Conversation ended due to {stop_reason}")
+                break
+            else:
+                print(f"Unknown stop reason, breaking conversation: {stop_reason}")
+                break
 
-        # Return the last response for analysis
         return all_responses
         
     except Exception as e:
