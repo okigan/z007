@@ -17,14 +17,21 @@ class ToolRegistry:
     
     def __init__(self):
         self.tools = {}  # {tool_name: function}
-        self.tool_descriptions = {}  # {tool_name: custom_description}
+        self.tool_metadata = {}  # {tool_name: {description, param_descriptions, etc.}}
     
-    def register(self, func, tool_name: Optional[str] = None, description: Optional[str] = None):
-        """Register a tool function and auto-generate its spec"""
+    def register(self, func, tool_name: Optional[str] = None, **metadata):
+        """
+        Register a tool function and auto-generate its spec
+        
+        Args:
+            func: The function to register
+            tool_name: Optional custom name for the tool
+            **metadata: Custom metadata (description, param_descriptions, etc.)
+        """
         name = tool_name or func.__name__
         self.tools[name] = func
-        if description:
-            self.tool_descriptions[name] = description
+        if metadata:
+            self.tool_metadata[name] = metadata
     
     def execute(self, tool_name: str, tool_input: dict) -> str:
         """Execute a tool by name"""
@@ -50,11 +57,10 @@ class ToolRegistry:
     
     def _create_spec_from_function(self, func, tool_name: str) -> dict:
         """Create a Bedrock tool specification from a Python function"""
+        metadata = self.tool_metadata.get(tool_name, {})
+        
         # Use custom description if provided, otherwise use docstring
-        if tool_name in self.tool_descriptions:
-            description = self.tool_descriptions[tool_name]
-        else:
-            description = func.__doc__ or f"Tool: {tool_name}"
+        description = metadata.get('description') or func.__doc__ or f"Tool: {tool_name}"
         
         # Get function signature
         sig = inspect.signature(func)
@@ -62,6 +68,9 @@ class ToolRegistry:
         
         properties = {}
         required = []
+        
+        # Custom parameter descriptions from metadata
+        param_descriptions = metadata.get('param_descriptions', {})
         
         for param_name, param in sig.parameters.items():
             if param_name == 'self':  # Skip self parameter
@@ -85,9 +94,12 @@ class ToolRegistry:
             else:
                 json_type = "string"  # Default fallback
             
+            # Use custom parameter description if provided
+            param_desc = param_descriptions.get(param_name, f"Parameter: {param_name}")
+            
             properties[param_name] = {
                 "type": json_type,
-                "description": f"Parameter: {param_name}"
+                "description": param_desc
             }
             
             # Check if parameter is required (no default value)
@@ -171,12 +183,17 @@ NUM_TOOLS = 50
 for i in range(NUM_TOOLS):
     tool_registry.register(
         calculator_tool, 
-        f"tool_{i}",
-        f"Calculator tool {i} - performs mathematical calculations and arithmetic operations"
+        tool_name=f"tool_{i}",
+        description=f"Calculator tool {i} - performs mathematical calculations and arithmetic operations"
     )
 
-# Register noisy tool
-tool_registry.register(noisy_text_generator)
+# Register noisy tool with custom parameter descriptions
+tool_registry.register(
+    noisy_text_generator,
+    param_descriptions={
+        'request': 'Specific type of content to generate (e.g., "test data", "random text", "sample output")'
+    }
+)
 
 # Get Bedrock tool specifications
 AVAILABLE_TOOLS = tool_registry.get_bedrock_specs()
