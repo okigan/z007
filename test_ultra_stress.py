@@ -22,8 +22,6 @@ logger = colorlog.getLogger(__name__)
 
 MODEL_ID = "openai.gpt-oss-20b-1:0"
 
-logger.warning("hello world")
-
 class ToolRegistry:
     """Streamlined registry for both local and MCP tools"""
     
@@ -229,62 +227,6 @@ class ToolRegistry:
         self.mcp_tools.clear()
 
 
-def create_tool_registry() -> ToolRegistry:
-    """Create and configure the tool registry with all tools"""
-    registry = ToolRegistry()
-    
-    # Simple tool functions
-    def calculator_tool(expression: str) -> str:
-        """Calculator tool - performs mathematical calculations"""
-        try:
-            # Basic safety check
-            if any(char in expression for char in ['import', 'exec', 'eval', '__']):
-                return "Error: Invalid expression"
-            result = eval(expression)
-            return str(result)
-        except Exception as e:
-            return f"Error: {e}"
-
-    def noisy_text_generator(request: str = "test data") -> str:
-        """Generate text with various non-alphanumeric characters"""
-        import random
-        import string
-        
-        # Generate random noise
-        noise_chars = ''.join(random.choices(string.ascii_letters + string.digits + '!@#$%^&*()[]{}|\\:";\'<>?,./~`', k=50))
-        unicode_chars = "¡™£¢∞§¶•ªº–≠œ∑´®†¥¨ˆøπ«åß∂ƒ©˙∆˚¬…æΩ≈ç√∫˜µ≤≥÷"
-        
-        return f"""NOISE_START_{noise_chars}_NOISE_MID
-Generated text based on request: {request}
-EXTRA_CHARS: {unicode_chars}
-MORE_NOISE_{noise_chars}_END_NOISE
-RANDOM_SYMBOLS: ◊Ω≈ç√∫˜µ≤≥÷æ…¬Ω≈ç√∫˜
-{noise_chars}
-FINAL_NOISE_BLOCK_{noise_chars}_COMPLETE"""
-
-    # Register basic tools
-    registry.register(calculator_tool)
-    registry.register(noisy_text_generator)
-
-    # Generate 50 dummy calculator tools
-    NUM_TOOLS = 50
-    for i in range(NUM_TOOLS):
-        def make_tool(tool_id):
-            def tool_func(expression: str) -> str:
-                try:
-                    result = eval(expression)
-                    return str(result)
-                except Exception as e:
-                    return f"Error: {e}"
-            tool_func.__name__ = f"tool_{tool_id}"
-            tool_func.__doc__ = f"Calculator tool {tool_id} - performs mathematical calculations"
-            return tool_func
-        
-        registry.register(make_tool(i))
-    
-    return registry
-
-
 def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolRegistry) -> list:
     """Run conversation with Bedrock"""
     bedrock = boto3.client("bedrock-runtime")
@@ -365,6 +307,62 @@ def get_called_tools(responses):
         except Exception:
             continue
     return tools
+
+def create_tool_registry() -> ToolRegistry:
+    """Create and configure the tool registry with all tools"""
+    registry = ToolRegistry()
+    
+    # Simple tool functions
+    def calculator_tool(expression: str) -> str:
+        """Calculator tool - performs mathematical calculations"""
+        try:
+            # Basic safety check
+            if any(char in expression for char in ['import', 'exec', 'eval', '__']):
+                return "Error: Invalid expression"
+            result = eval(expression)
+            return str(result)
+        except Exception as e:
+            return f"Error: {e}"
+
+    def noisy_text_generator(request: str = "test data") -> str:
+        """Generate text with various non-alphanumeric characters"""
+        import random
+        import string
+        
+        # Generate random noise
+        noise_chars = ''.join(random.choices(string.ascii_letters + string.digits + '!@#$%^&*()[]{}|\\:";\'<>?,./~`', k=50))
+        unicode_chars = "¡™£¢∞§¶•ªº–≠œ∑´®†¥¨ˆøπ«åß∂ƒ©˙∆˚¬…æΩ≈ç√∫˜µ≤≥÷"
+        
+        return f"""NOISE_START_{noise_chars}_NOISE_MID
+Generated text based on request: {request}
+EXTRA_CHARS: {unicode_chars}
+MORE_NOISE_{noise_chars}_END_NOISE
+RANDOM_SYMBOLS: ◊Ω≈ç√∫˜µ≤≥÷æ…¬Ω≈ç√∫˜
+{noise_chars}
+FINAL_NOISE_BLOCK_{noise_chars}_COMPLETE"""
+
+    # Register basic tools
+    registry.register(calculator_tool)
+    registry.register(noisy_text_generator)
+
+    # Generate 50 dummy calculator tools
+    NUM_TOOLS = 50
+    for i in range(NUM_TOOLS):
+        def make_tool(tool_id):
+            def tool_func(expression: str) -> str:
+                try:
+                    result = eval(expression)
+                    return str(result)
+                except Exception as e:
+                    return f"Error: {e}"
+            tool_func.__name__ = f"tool_{tool_id}"
+            tool_func.__doc__ = f"Calculator tool {tool_id} - performs mathematical calculations"
+            return tool_func
+        
+        registry.register(make_tool(i))
+    
+    return registry
+
 
 # Test cases
 TEST_CASES = [
