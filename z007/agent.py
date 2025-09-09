@@ -6,19 +6,18 @@ Supports multiple providers including AWS Bedrock, with tool and MCP support.
 
 import json
 import inspect
+import logging
 import subprocess
 import select
 import time
-import colorlog
 import anyio
 
 from pathlib import Path
 from typing import get_type_hints, Any, Callable
 from boto3.session import Session
 
-# Set up colored logging
-colorlog.basicConfig(format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
-logger = colorlog.getLogger(__name__)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 class ToolRegistry:

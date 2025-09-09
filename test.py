@@ -4,16 +4,16 @@ Main test module for stress testing agent tools.
 """
 
 import json
+import logging
 import anyio
-import colorlog
 
 from pathlib import Path
 from typing import Any, Callable
 from z007 import Agent, create_calculator_tool
 
-# Set up colored logging
-colorlog.basicConfig(format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
-logger = colorlog.getLogger(__name__)
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def get_called_tools(responses: list[Any]) -> list[str]:

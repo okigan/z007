@@ -9,7 +9,7 @@ packages = ["z007"]
 
 [project]
 name = "z007"
-version = "0.1.4"
+version = "0.1.5"
 description = "Micro agent with tool support and MCP integration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,8 +35,8 @@ dependencies = [
     "anyio>=4.10.0",
     "boto3",
     "botocore",
-    "colorlog>=6.9.0",
     "python-dotenv>=1.0.0",
+    "rich>=14.1.0",
 ]
 
 [project.urls]
@@ -86,7 +86,6 @@ disallow_subclassing_any = false
 
 # Third-party libraries without proper stubs
 [[tool.mypy.overrides]]
-module = "colorlog"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
