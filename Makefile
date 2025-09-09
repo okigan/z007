@@ -45,4 +45,5 @@ publish-test:	## Publish to Test PyPI
 	uv publish --publish-url https://test.pypi.org/legacy/
 
 publish: build
+	# use export $(xargs < .env) to get the env setup	
 	uv publish
