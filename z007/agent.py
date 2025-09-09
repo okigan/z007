@@ -387,7 +387,7 @@ class Agent:
         self.model_id = model_id
         self.system_prompt = system_prompt
         self.max_turns = max_turns
-        self.bedrock = Session().client("bedrock-runtime")
+        self.bedrock_runtime_client = Session().client("bedrock-runtime")
 
         # Create internal tool registry
         self._tool_registry = ToolRegistry()
@@ -535,7 +535,7 @@ class Agent:
                     converse_params["system"] = [{"text": self.system_prompt}]
                 # Make bedrock call
                 response = await anyio.to_thread.run_sync(  # type: ignore
-                    lambda: self.bedrock.converse(**converse_params)
+                    lambda: self.bedrock_runtime_client.converse(**converse_params)
                 )
                 responses.append(response)
 
