@@ -15,7 +15,7 @@ import colorlog
 import anyio
 
 from pathlib import Path
-from typing import get_type_hints
+from typing import get_type_hints, Any, Callable
 
 # Set up colored logging
 colorlog.basicConfig(level=logging.INFO, format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
@@ -26,20 +26,20 @@ MODEL_ID = "openai.gpt-oss-20b-1:0"
 class ToolRegistry:
     """Streamlined registry for both local and MCP tools"""
     
-    def __init__(self):
-        self.tools = {}  # {tool_name: function}
-        self.tool_metadata = {}  # {tool_name: metadata}
-        self.mcp_servers = {}  # {server_name: process}
-        self.mcp_tools = {}  # {tool_name: server_name}
+    def __init__(self) -> None:
+        self.tools: dict[str, Callable[..., Any]] = {}  # {tool_name: function}
+        self.tool_metadata: dict[str, dict[str, Any]] = {}  # {tool_name: metadata}
+        self.mcp_servers: dict[str, subprocess.Popen[str]] = {}  # {server_name: process}
+        self.mcp_tools: dict[str, str] = {}  # {tool_name: server_name}
     
-    def register(self, func, **metadata):
+    def register(self, func: Callable[..., Any], **metadata: Any) -> "ToolRegistry":
         """Register a function as a tool"""
         self.tools[func.__name__] = func
         if metadata:
             self.tool_metadata[func.__name__] = metadata
         return self
     
-    def load_mcp_config(self, config_path: str):
+    def load_mcp_config(self, config_path: str) -> "ToolRegistry":
         """Load MCP servers from config file"""
         try:
             if not Path(config_path).exists():
@@ -60,13 +60,13 @@ class ToolRegistry:
             logger.error(f"MCP config error: {e}")
             return self
     
-    def _start_mcp_server(self, name: str, command: list):
+    def _start_mcp_server(self, name: str, command: list[str]) -> None:
         """Start MCP server and load tools"""
         try:
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
             time.sleep(0.5)
             
-            if return_code := process.poll() is not None:
+            if (return_code := process.poll()) is not None:
                 logger.error(f"MCP '{name}' failed to start with return code {return_code}")
                 return
 
@@ -116,7 +116,7 @@ class ToolRegistry:
         except Exception as e:
             logger.error(f"MCP '{name}' error: {e}")
     
-    async def execute(self, tool_name: str, tool_input: dict) -> str:
+    async def execute(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         """Execute tool (local or MCP) asynchronously"""
         if tool_name in self.mcp_tools:
             return await self._execute_mcp_async(tool_name, tool_input)
@@ -125,17 +125,21 @@ class ToolRegistry:
             sig = inspect.signature(func)
             kwargs = {p: tool_input.get(p) for p in sig.parameters.keys() if p in tool_input}
             # Run sync function in thread using AnyIO  
-            def call_with_kwargs():
+            def call_with_kwargs() -> Any:
                 return func(**kwargs)
             return await anyio.to_thread.run_sync(call_with_kwargs)  # type: ignore
         else:
             return f"Error: Unknown tool {tool_name}"
     
-    def _execute_mcp(self, tool_name: str, tool_input: dict) -> str:
+    def _execute_mcp(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         """Execute MCP tool"""
         try:
             server_name = self.mcp_tools[tool_name]
             process = self.mcp_servers[server_name]
+            
+            # Check if stdin and stdout are available
+            if process.stdin is None or process.stdout is None:
+                return f"Error: Process streams not available for {tool_name}"
             
             request = {
                 "jsonrpc": "2.0",
@@ -168,7 +172,7 @@ class ToolRegistry:
         except Exception as e:
             return f"Error: {e}"
 
-    async def _execute_mcp_async(self, tool_name: str, tool_input: dict) -> str:
+    async def _execute_mcp_async(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         """Execute MCP tool asynchronously"""
         try:
             # Run the sync MCP communication using AnyIO
@@ -176,11 +180,15 @@ class ToolRegistry:
         except Exception as e:
             return f"Error: {e}"
 
-    def _execute_mcp_sync(self, tool_name: str, tool_input: dict) -> str:
+    def _execute_mcp_sync(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         """Synchronous MCP execution for thread pool"""
         try:
             server_name = self.mcp_tools[tool_name]
             process = self.mcp_servers[server_name]
+            
+            # Check if stdin and stdout are available
+            if process.stdin is None or process.stdout is None:
+                return f"Error: Process streams not available for {tool_name}"
             
             request = {
                 "jsonrpc": "2.0",
@@ -213,9 +221,9 @@ class ToolRegistry:
         except Exception as e:
             return f"Error: {e}"
     
-    def get_bedrock_specs(self) -> list:
+    def get_bedrock_specs(self) -> list[dict[str, Any]]:
         """Get all tools as Bedrock specifications"""
-        specs = []
+        specs: list[dict[str, Any]] = []
         
         # Local tools
         for name, func in self.tools.items():
@@ -224,8 +232,8 @@ class ToolRegistry:
             
             sig = inspect.signature(func)
             type_hints = get_type_hints(func)
-            properties = {}
-            required = []
+            properties: dict[str, dict[str, str]] = {}
+            required: list[str] = []
             
             for param_name, param in sig.parameters.items():
                 param_type = type_hints.get(param_name, str)
@@ -264,7 +272,7 @@ class ToolRegistry:
         
         return specs
     
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Cleanup MCP servers"""
         for name, process in self.mcp_servers.items():
             try:
@@ -276,26 +284,27 @@ class ToolRegistry:
         self.mcp_tools.clear()
 
 
-async def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolRegistry) -> list:
+async def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolRegistry) -> list[dict[str, Any]]:
     """Run conversation with Bedrock - async tool execution using AnyIO"""
     bedrock = boto3.client("bedrock-runtime")
     
     try:
-        messages = [{"role": "user", "content": [{"text": prompt}]}]
-        responses = []
+        messages: list[dict[str, Any]] = [{"role": "user", "content": [{"text": prompt}]}]
+        responses: list[dict[str, Any]] = []
         
         # Get current tools (including any MCP tools loaded)
         available_tools = tool_registry_instance.get_bedrock_specs()
         
         for _ in range(5):  # Max 5 turns
             # Run bedrock call in thread using AnyIO
-            response = await anyio.to_thread.run_sync(  # type: ignore
-                lambda: bedrock.converse(
+            def bedrock_call() -> Any:  # AWS SDK doesn't have precise return types
+                return bedrock.converse(
                     modelId=model_id,
                     messages=messages,
                     toolConfig={"tools": available_tools, "toolChoice": {"any": {}}}
                 )
-            )
+            
+            response = await anyio.to_thread.run_sync(bedrock_call)  # type: ignore
             responses.append(response)
             
             stop_reason = response.get('stopReason')
@@ -322,7 +331,7 @@ async def run_conversation(prompt: str, model_id: str, tool_registry_instance: T
                         results = []  # Initialize results list
                         
                         async with anyio.create_task_group() as tg:
-                            async def execute_and_collect(name, input_data, use_id):
+                            async def execute_and_collect(name: str, input_data: dict[str, Any], use_id: str) -> None:
                                 result = await tool_registry_instance.execute(name, input_data)
                                 results.append({
                                     "toolResult": {
@@ -352,7 +361,7 @@ async def run_conversation(prompt: str, model_id: str, tool_registry_instance: T
     except Exception as e:
         return [{"error": str(e)}]
 
-def extract_final_answer(response):
+def extract_final_answer(response: dict[str, Any]) -> str:
     """Extract final answer from response"""
     try:
         content = response.get('output', {}).get('message', {}).get('content', [])
@@ -363,15 +372,17 @@ def extract_final_answer(response):
     except Exception:
         return "No final answer found"
 
-def get_called_tools(responses):
+def get_called_tools(responses: list[dict[str, Any]]) -> list[str]:
     """Get list of called tools"""
-    tools = []
+    tools: list[str] = []
     for response in responses:
         try:
             content = response.get('output', {}).get('message', {}).get('content', [])
             for item in content:
                 if isinstance(item, dict) and 'toolUse' in item:
-                    tools.append(item['toolUse'].get('name'))
+                    tool_name = item['toolUse'].get('name')
+                    if tool_name and isinstance(tool_name, str):
+                        tools.append(tool_name)
         except Exception:
             continue
     return tools
@@ -387,7 +398,7 @@ def create_tool_registry() -> ToolRegistry:
             # Basic safety check
             if any(char in expression for char in ['import', 'exec', 'eval', '__']):
                 return "Error: Invalid expression"
-            result = eval(expression)
+            result: Any = eval(expression)  # eval can return Any type
             return str(result)
         except Exception as e:
             return f"Error: {e}"
@@ -416,10 +427,13 @@ FINAL_NOISE_BLOCK_{noise_chars}_COMPLETE"""
     # Generate 50 dummy calculator tools
     NUM_TOOLS = 50
     for i in range(NUM_TOOLS):
-        def make_tool(tool_id):
+        def make_tool(tool_id: int) -> Callable[[str], str]:
             def tool_func(expression: str) -> str:
                 try:
-                    result = eval(expression)
+                    # Basic safety check
+                    if any(char in expression for char in ['import', 'exec', 'eval', '__']):
+                        return "Error: Invalid expression"
+                    result: Any = eval(expression)  # eval can return Any type
                     return str(result)
                 except Exception as e:
                     return f"Error: {e}"
@@ -443,7 +457,7 @@ TEST_CASES = [
     # "First call noisy_text_generator with request 'sample output', then calculate 15 * 23 using tool_0. Both tools must be used."
 ]
 
-async def async_main():
+async def async_main() -> None:
     logger.info("=== Streamlined Tool Stress Test ===")
     logger.info(f"Model: {MODEL_ID}")
     
@@ -482,7 +496,7 @@ async def async_main():
     finally:
         tool_registry.cleanup()
 
-def main():
+def main() -> None:
     anyio.run(async_main)
 
 if __name__ == "__main__":
