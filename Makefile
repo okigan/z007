@@ -47,3 +47,13 @@ publish-test:	## Publish to Test PyPI
 publish: build
 	# use export $(xargs < .env) to get the env setup	
 	uv publish
+
+record:
+	export PS1="igor %# "
+	printf '\e[8;24;100t'
+	asciinema rec demo.cast
+	agg demo.cast demo.mp4
+
+	uvx z007
+	list current tools
+	show hacker news headlines

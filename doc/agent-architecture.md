@@ -12,6 +12,18 @@ The `z007` agent (~600 lines) demonstrates that effective AI agents operate on t
 2. **Tools and MCPs are executed through structured calls and appended to the message list** 
 3. **Repeat until the conversation teminates**
 
+## Demo
+
+<video width="800" controls>
+  <source src="./demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+## Start the Agent
+```bash
+uvx z007
+```
+
 ## Baseline Architecture
 
 ### Agent Evaluation Loop
