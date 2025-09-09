@@ -11,14 +11,18 @@ import logging
 import subprocess
 import select
 import time
+import colorlog
+
 from pathlib import Path
 from typing import get_type_hints
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Set up colored logging
+colorlog.basicConfig(level=logging.INFO, format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
+logger = colorlog.getLogger(__name__)
 
 MODEL_ID = "openai.gpt-oss-20b-1:0"
+
+logger.warning("hello world")
 
 class ToolRegistry:
     """Streamlined registry for both local and MCP tools"""
@@ -63,17 +67,13 @@ class ToolRegistry:
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
             time.sleep(0.5)
             
-            if process.poll() is not None:
-                logger.warning(f"✗ MCP '{name}' failed to start")
+            if return_code := process.poll() is not None:
+                logger.error(f"✗ MCP '{name}' failed to start with return code {return_code}")
                 return
 
             # Check if stdin is available
-            if process.stdin is None:
-                logger.warning(f"✗ MCP '{name}' stdin not available")
-                return
-
-            if process.stdout is None:
-                logger.warning(f"✗ MCP '{name}' stdout not available")
+            if process.stdin is None or process.stdout is None:
+                logger.error(f"✗ MCP '{name}' stdin or stdout not available")
                 return
             
             self.mcp_servers[name] = process
@@ -106,7 +106,7 @@ class ToolRegistry:
                                     "is_mcp": True
                                 }
                                 tools_count += 1
-                            logger.info(f"✓ Loaded {tools_count} tools from MCP '{name}'")
+                            logger.info(f"Loaded {tools_count} tools from MCP '{name}'")
                             return
                     except (json.JSONDecodeError, KeyError):
                         continue

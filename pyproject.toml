@@ -11,5 +11,6 @@ requires-python = ">=3.9"
 dependencies = [
     "boto3",
     "botocore",
-    "pydantic-ai"
+    "colorlog>=6.9.0",
+    "pydantic-ai",
 ]
