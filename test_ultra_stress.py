@@ -17,11 +17,14 @@ class ToolRegistry:
     
     def __init__(self):
         self.tools = {}  # {tool_name: function}
+        self.tool_descriptions = {}  # {tool_name: custom_description}
     
-    def register(self, func, tool_name: Optional[str] = None):
+    def register(self, func, tool_name: Optional[str] = None, description: Optional[str] = None):
         """Register a tool function and auto-generate its spec"""
         name = tool_name or func.__name__
         self.tools[name] = func
+        if description:
+            self.tool_descriptions[name] = description
     
     def execute(self, tool_name: str, tool_input: dict) -> str:
         """Execute a tool by name"""
@@ -47,7 +50,11 @@ class ToolRegistry:
     
     def _create_spec_from_function(self, func, tool_name: str) -> dict:
         """Create a Bedrock tool specification from a Python function"""
-        description = func.__doc__ or f"Tool: {tool_name}"
+        # Use custom description if provided, otherwise use docstring
+        if tool_name in self.tool_descriptions:
+            description = self.tool_descriptions[tool_name]
+        else:
+            description = func.__doc__ or f"Tool: {tool_name}"
         
         # Get function signature
         sig = inspect.signature(func)
@@ -162,17 +169,17 @@ NUM_TOOLS = 50
 
 # Register calculator tools (multiple instances of the same tool)
 for i in range(NUM_TOOLS):
-    tool_registry.register(calculator_tool, f"tool_{i}")
+    tool_registry.register(
+        calculator_tool, 
+        f"tool_{i}",
+        f"Calculator tool {i} - performs mathematical calculations and arithmetic operations"
+    )
 
 # Register noisy tool
 tool_registry.register(noisy_text_generator)
 
 # Get Bedrock tool specifications
 AVAILABLE_TOOLS = tool_registry.get_bedrock_specs()
-
-# Update calculator tool descriptions to include tool number
-for i, tool_spec in enumerate(AVAILABLE_TOOLS[:NUM_TOOLS]):
-    tool_spec["toolSpec"]["description"] = f"Calculator tool {i} - performs mathematical calculations and arithmetic operations"
 
 def test_with_many_tools(prompt) -> list:
     """Test with many tools and handle full conversation flow with actual tool execution"""
