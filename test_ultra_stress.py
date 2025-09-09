@@ -7,11 +7,16 @@ Provides many tools and checks if the model tries to call tools that don't exist
 import boto3
 import json
 import inspect
+import logging
 import subprocess
 import select
 import time
 from pathlib import Path
 from typing import get_type_hints
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 MODEL_ID = "openai.gpt-oss-20b-1:0"
 
@@ -49,7 +54,7 @@ class ToolRegistry:
             
             return self
         except Exception as e:
-            print(f"MCP config error: {e}")
+            logger.error(f"MCP config error: {e}")
             return self
     
     def _start_mcp_server(self, name: str, command: list):
@@ -59,16 +64,16 @@ class ToolRegistry:
             time.sleep(0.5)
             
             if process.poll() is not None:
-                print(f"✗ MCP '{name}' failed to start")
+                logger.warning(f"✗ MCP '{name}' failed to start")
                 return
 
             # Check if stdin is available
             if process.stdin is None:
-                print(f"✗ MCP '{name}' stdin not available")
+                logger.warning(f"✗ MCP '{name}' stdin not available")
                 return
 
             if process.stdout is None:
-                print(f"✗ MCP '{name}' stdout not available")
+                logger.warning(f"✗ MCP '{name}' stdout not available")
                 return
             
             self.mcp_servers[name] = process
@@ -101,16 +106,16 @@ class ToolRegistry:
                                     "is_mcp": True
                                 }
                                 tools_count += 1
-                            print(f"✓ Loaded {tools_count} tools from MCP '{name}'")
+                            logger.info(f"✓ Loaded {tools_count} tools from MCP '{name}'")
                             return
                     except (json.JSONDecodeError, KeyError):
                         continue
                 if process.poll() is not None:
                     break
             
-            print(f"✗ MCP '{name}' timeout")
+            logger.warning(f"✗ MCP '{name}' timeout")
         except Exception as e:
-            print(f"✗ MCP '{name}' error: {e}")
+            logger.error(f"✗ MCP '{name}' error: {e}")
     
     def execute(self, tool_name: str, tool_input: dict) -> str:
         """Execute tool (local or MCP)"""
@@ -224,31 +229,32 @@ class ToolRegistry:
         self.mcp_tools.clear()
 
 
-# Create global registry
-tool_registry = ToolRegistry()
-
-# Simple tool functions
-def calculator_tool(expression: str) -> str:
-    """Calculator tool - performs mathematical calculations"""
-    try:
-        # Basic safety check
-        if any(char in expression for char in ['import', 'exec', 'eval', '__']):
-            return "Error: Invalid expression"
-        result = eval(expression)
-        return str(result)
-    except Exception as e:
-        return f"Error: {e}"
-
-def noisy_text_generator(request: str = "test data") -> str:
-    """Generate text with various non-alphanumeric characters"""
-    import random
-    import string
+def create_tool_registry() -> ToolRegistry:
+    """Create and configure the tool registry with all tools"""
+    registry = ToolRegistry()
     
-    # Generate random noise
-    noise_chars = ''.join(random.choices(string.ascii_letters + string.digits + '!@#$%^&*()[]{}|\\:";\'<>?,./~`', k=50))
-    unicode_chars = "¡™£¢∞§¶•ªº–≠œ∑´®†¥¨ˆøπ«åß∂ƒ©˙∆˚¬…æΩ≈ç√∫˜µ≤≥÷"
-    
-    return f"""NOISE_START_{noise_chars}_NOISE_MID
+    # Simple tool functions
+    def calculator_tool(expression: str) -> str:
+        """Calculator tool - performs mathematical calculations"""
+        try:
+            # Basic safety check
+            if any(char in expression for char in ['import', 'exec', 'eval', '__']):
+                return "Error: Invalid expression"
+            result = eval(expression)
+            return str(result)
+        except Exception as e:
+            return f"Error: {e}"
+
+    def noisy_text_generator(request: str = "test data") -> str:
+        """Generate text with various non-alphanumeric characters"""
+        import random
+        import string
+        
+        # Generate random noise
+        noise_chars = ''.join(random.choices(string.ascii_letters + string.digits + '!@#$%^&*()[]{}|\\:";\'<>?,./~`', k=50))
+        unicode_chars = "¡™£¢∞§¶•ªº–≠œ∑´®†¥¨ˆøπ«åß∂ƒ©˙∆˚¬…æΩ≈ç√∫˜µ≤≥÷"
+        
+        return f"""NOISE_START_{noise_chars}_NOISE_MID
 Generated text based on request: {request}
 EXTRA_CHARS: {unicode_chars}
 MORE_NOISE_{noise_chars}_END_NOISE
@@ -256,27 +262,30 @@ RANDOM_SYMBOLS: ◊Ω≈ç√∫˜µ≤≥÷æ…¬Ω≈ç√∫˜
 {noise_chars}
 FINAL_NOISE_BLOCK_{noise_chars}_COMPLETE"""
 
-# Register tools
-tool_registry.register(calculator_tool)
-tool_registry.register(noisy_text_generator)
+    # Register basic tools
+    registry.register(calculator_tool)
+    registry.register(noisy_text_generator)
 
-# Generate 50 dummy calculator tools
-NUM_TOOLS = 50
-for i in range(NUM_TOOLS):
-    def make_tool(tool_id):
-        def tool_func(expression: str) -> str:
-            try:
-                result = eval(expression)
-                return str(result)
-            except Exception as e:
-                return f"Error: {e}"
-        tool_func.__name__ = f"tool_{tool_id}"
-        tool_func.__doc__ = f"Calculator tool {tool_id} - performs mathematical calculations"
-        return tool_func
+    # Generate 50 dummy calculator tools
+    NUM_TOOLS = 50
+    for i in range(NUM_TOOLS):
+        def make_tool(tool_id):
+            def tool_func(expression: str) -> str:
+                try:
+                    result = eval(expression)
+                    return str(result)
+                except Exception as e:
+                    return f"Error: {e}"
+            tool_func.__name__ = f"tool_{tool_id}"
+            tool_func.__doc__ = f"Calculator tool {tool_id} - performs mathematical calculations"
+            return tool_func
+        
+        registry.register(make_tool(i))
     
-    tool_registry.register(make_tool(i))
+    return registry
 
-def run_conversation(prompt: str) -> list:
+
+def run_conversation(prompt: str, model_id: str, tool_registry_instance: ToolRegistry) -> list:
     """Run conversation with Bedrock"""
     bedrock = boto3.client("bedrock-runtime")
     
@@ -285,11 +294,11 @@ def run_conversation(prompt: str) -> list:
         responses = []
         
         # Get current tools (including any MCP tools loaded)
-        available_tools = tool_registry.get_bedrock_specs()
+        available_tools = tool_registry_instance.get_bedrock_specs()
         
         for _ in range(5):  # Max 5 turns
             response = bedrock.converse(
-                modelId=MODEL_ID,
+                modelId=model_id,
                 messages=messages,
                 toolConfig={"tools": available_tools, "toolChoice": {"any": {}}}
             )
@@ -308,7 +317,7 @@ def run_conversation(prompt: str) -> list:
                     for item in content:
                         if isinstance(item, dict) and 'toolUse' in item:
                             tool_use = item['toolUse']
-                            result = tool_registry.execute(tool_use.get('name'), tool_use.get('input', {}))
+                            result = tool_registry_instance.execute(tool_use.get('name'), tool_use.get('input', {}))
                             tool_results.append({
                                 "toolResult": {
                                     "toolUseId": tool_use.get('toolUseId'),
@@ -321,8 +330,12 @@ def run_conversation(prompt: str) -> list:
                     else:
                         break
                 else:
+                    # log the issue
+                    logger.debug(f"Assistant message not found in response: {response}")
                     break
             else:
+                # log the unexpected stop reason, and whole response as one liner
+                logger.debug(f"Unexpected stop reason: {stop_reason}, Full response: {response}")
                 break
         
         return responses
@@ -365,37 +378,40 @@ TEST_CASES = [
 ]
 
 def main():
-    print("=== Streamlined Tool Stress Test ===")
-    print(f"Model: {MODEL_ID}")
+    logger.info("=== Streamlined Tool Stress Test ===")
+    logger.info(f"Model: {MODEL_ID}")
+    
+    # Create and configure tool registry
+    tool_registry = create_tool_registry()
     
     # Load MCP servers
     tool_registry.load_mcp_config("./.vscode/mcp.json")
     
     # Show tool counts
     local_count = len(tool_registry.tools)
-    mcp_count = len(tool_registry.mcp_tools)
-    print(f"Tools: {local_count} local + {mcp_count} MCP = {local_count + mcp_count} total")
-    print()
+    mcp_server_count = len(tool_registry.mcp_servers)
+    mcp_tools_count = len(tool_registry.mcp_tools)
+    logger.info(f"Tools: {local_count} local + {mcp_tools_count} MCP from {mcp_server_count} servers = {local_count + mcp_tools_count} total")
     
     try:
         for i, test_case in enumerate(TEST_CASES):
-            print(f"--- Test {i+1} ---")
-            print(f"Prompt: {test_case}")
+            logger.info(f"--- Test {i+1} ---")
+            logger.info(f"Prompt: {test_case}")
             
-            responses = run_conversation(test_case)
+            responses = run_conversation(test_case, MODEL_ID, tool_registry)
             last_response = responses[-1] if responses else {}
             
-            print(f"Answer: {extract_final_answer(last_response)}")
+            logger.info(f"Answer: {extract_final_answer(last_response)}")
             
             called_tools = get_called_tools(responses)
             if called_tools:
-                print(f"Tools: {', '.join(called_tools)}")
+                logger.info(f"Tools: {', '.join(called_tools)}")
             else:
-                print("Tools: None")
+                logger.info("Tools: None")
             
-            print("=" * 60)
+            logger.info("=" * 60)
         
-        print(f"\nCompleted {len(TEST_CASES)} tests")
+        logger.info(f"Completed {len(TEST_CASES)} tests")
         
     finally:
         tool_registry.cleanup()
