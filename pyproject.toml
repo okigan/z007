@@ -1,9 +1,9 @@
 
 
 [project]
-name = "aws-bedrock-gpt-oss-tester"
+name = "zappy"
 version = "0.1.0"
-description = "Test script for AWS Bedrock using Llama 3 70B Instruct and gpt-oss-20b with Converse API and tool support."
+description = "Micro agent with tool support and MCP integration."
 authors = [
     { name = "Your Name", email = "your.email@example.com" }
 ]
@@ -16,6 +16,9 @@ dependencies = [
     "pydantic-ai",
     "python-dotenv>=1.0.0",
 ]
+
+[project.scripts]
+zappy = "zappy.main:main"
 
 [dependency-groups]
 dev = [

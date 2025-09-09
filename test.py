@@ -9,7 +9,7 @@ import colorlog
 
 from pathlib import Path
 from typing import Any, Callable
-from agent import Agent
+from zappy import Agent, create_calculator_tool
 
 # Set up colored logging
 colorlog.basicConfig(format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
@@ -38,17 +38,8 @@ def create_tools() -> list[Callable[..., Any]]:
     """Create and return list of tool functions"""
     tools = []
     
-    # Simple tool functions
-    def calculator_tool(expression: str) -> str:
-        """Calculator tool - performs mathematical calculations"""
-        try:
-            # Basic safety check
-            if any(char in expression for char in ['import', 'exec', 'eval', '__']):
-                return "Error: Invalid expression"
-            result: Any = eval(expression)  # eval can return Any type
-            return str(result)
-        except Exception as e:
-            return f"Error: {e}"
+    # Use the built-in calculator tool from zappy
+    calculator_tool = create_calculator_tool()
 
     def noisy_text_generator(request: str = "test data") -> str:
         """Generate text with various non-alphanumeric characters"""

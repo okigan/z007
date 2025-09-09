@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AWS Bedrock GPT OSS Tester - Interactive REPL
+zappy - Fast Micro Agent Interactive REPL
 """
 
 import json
@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 from dotenv import load_dotenv
-from agent import Agent
+from .agent import Agent
 
 # Load environment variables from .env file
 load_dotenv()
@@ -76,7 +76,7 @@ def load_mcp_config_from_file(config_path: str) -> dict[str, Any] | None:
 
 def print_help():
     """Print help information"""
-    print("\n=== AWS Bedrock GPT OSS Tester REPL ===")
+    print("\n=== zappy - Fast Micro Agent ===")
     print("Commands:")
     print("  /help     - Show this help message")
     print("  /tools    - List available tools")
@@ -109,7 +109,7 @@ async def async_main() -> None:
     model_id = "openai.gpt-oss-20b-1:0"
     mcp_config_filepath = "./.vscode/mcp.json"
 
-    print("Starting AWS Bedrock GPT OSS Tester...")
+    print("Starting zappy - Fast Micro Agent...")
     logger.info(f"Model: {model_id}")
 
     # Create tools and agent

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Agent module containing ToolRegistry and Agent classes for Bedrock integration.
+Agent module containing ToolRegistry and Agent classes for LLM integration.
+Supports multiple providers including AWS Bedrock, with tool and MCP support.
 """
 
 import json
@@ -84,11 +85,11 @@ class ToolRegistry:
                     else:
                         env[key] = value
             
-            logger.warning(f"Starting MCP server '{name}' with command: {' '.join(expanded_command)}")
+            logger.info(f"Starting MCP server '{name}' with command: {' '.join(expanded_command)}")
             process = subprocess.Popen(expanded_command, 
                                        stdin=subprocess.PIPE, 
                                        stdout=subprocess.PIPE, 
-                                        stderr=subprocess.PIPE,
+                                       stderr=subprocess.PIPE,
                                        text=True, 
                                        env=env,
                                        )
@@ -337,7 +338,7 @@ class ToolRegistry:
 
 
 class Agent:
-    """Streamlined Bedrock Agent with Pydantic AI-like interface"""
+    """Fast Micro Agent with tool support - supports multiple LLM providers"""
     
     def __init__(self, model_id: str, system_prompt: str | None = None, tools: list[Callable[..., Any]] | None = None, mcp_config: dict[str, Any] | None = None, max_turns: int = 5):
         self.model_id = model_id
@@ -462,7 +463,13 @@ class Agent:
                     # Extract tool calls
                     tool_calls = []
                     for item in assistant_msg['content']:
-                        if 'toolUse' in item:
+                        if 'reasoningContent' in item:
+                            reasoning_content = item['reasoningContent']
+                            reasoning_text = reasoning_content['reasoningText']
+                            text = reasoning_text['text']
+                            print("Reasoning: ", text)
+                            pass
+                        elif 'toolUse' in item:
                             tool_use = item['toolUse']
                             name = tool_use['name']
                             input_data = tool_use['input']
@@ -470,6 +477,8 @@ class Agent:
 
                             if name and use_id:
                                 tool_calls.append((name, input_data, use_id))
+                        else:
+                            logger.warning(f"Unknown item in assistant message content: {item}")
                     
                     if tool_calls:
                         # Execute all tools concurrently
@@ -503,3 +512,46 @@ class Agent:
                 break
         
         return responses
+
+
+# Convenience functions for simple use cases
+async def quick_ask(
+    question: str,
+    model_id: str = "openai.gpt-oss-20b-1:0",
+    tools: list[Callable[..., Any]] | None = None,
+    system_prompt: str | None = None
+) -> str:
+    """
+    Quick way to ask a single question
+    
+    Args:
+        question: The question to ask
+        model_id: LLM model ID to use
+        tools: Optional list of tools
+        system_prompt: Optional system prompt
+        
+    Returns:
+        The agent's response
+    """
+    async with Agent(
+        model_id=model_id, 
+        tools=tools,
+        system_prompt=system_prompt
+    ) as agent:
+        return await agent.run(question)
+
+
+def create_calculator_tool() -> Callable[..., str]:
+    """Create a basic calculator tool function"""
+    def calculator_tool(expression: str) -> str:
+        """Calculator tool - performs mathematical calculations"""
+        try:
+            # Basic safety check
+            if any(char in expression for char in ['import', 'exec', 'eval', '__']):
+                return "Error: Invalid expression"
+            result: Any = eval(expression)
+            return str(result)
+        except Exception as e:
+            return f"Error: {e}"
+    
+    return calculator_tool
