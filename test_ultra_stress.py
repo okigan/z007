@@ -397,7 +397,21 @@ class Agent:
     async def run(self, prompt: str) -> str:
         """Run a single conversation and return the final answer"""
         responses = await self.run_conversation(prompt)
-        return extract_final_answer(responses[-1]) if responses else "No response"
+        return Agent.extract_final_answer(responses[-1]) if responses else "No response"
+    
+    @staticmethod
+    def extract_final_answer(response: Any) -> str:
+        """Extract final answer from response"""
+        try:
+            content = response.get('output', {}).get('message', {}).get('content', [])
+            for item in content:
+                if isinstance(item, dict) and 'text' in item:
+                    text = item['text']
+                    if isinstance(text, str):
+                        return text
+            return "No final answer found"
+        except Exception:
+            return "No final answer found"
     
     async def run_conversation(self, prompt: str) -> list[Any]:
         """Run conversation with tool support - async tool execution using AnyIO"""
@@ -490,19 +504,6 @@ class Agent:
         
         return responses
 
-
-def extract_final_answer(response: Any) -> str:
-    """Extract final answer from response"""
-    try:
-        content = response.get('output', {}).get('message', {}).get('content', [])
-        for item in content:
-            if isinstance(item, dict) and 'text' in item:
-                text = item['text']
-                if isinstance(text, str):
-                    return text
-        return "No final answer found"
-    except Exception:
-        return "No final answer found"
 
 def get_called_tools(responses: list[Any]) -> list[str]:
     """Get list of called tools"""
@@ -635,7 +636,7 @@ async def async_main() -> None:
             responses = await agent.run_conversation(test_case)
             last_response = responses[-1] if responses else None
             
-            print(f"Answer: {extract_final_answer(last_response) if last_response else 'No response'}")
+            print(f"Answer: {Agent.extract_final_answer(last_response) if last_response else 'No response'}")
             print(f"Tools: {', '.join(get_called_tools(responses)) if get_called_tools(responses) else 'None'}")
             print("=" * 60)
 
