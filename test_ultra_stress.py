@@ -276,9 +276,6 @@ for i in range(NUM_TOOLS):
     
     tool_registry.register(make_tool(i))
 
-# Get Bedrock tools
-AVAILABLE_TOOLS = tool_registry.get_bedrock_specs()
-
 def run_conversation(prompt: str) -> list:
     """Run conversation with Bedrock"""
     bedrock = boto3.client("bedrock-runtime")
@@ -287,11 +284,14 @@ def run_conversation(prompt: str) -> list:
         messages = [{"role": "user", "content": [{"text": prompt}]}]
         responses = []
         
+        # Get current tools (including any MCP tools loaded)
+        available_tools = tool_registry.get_bedrock_specs()
+        
         for _ in range(5):  # Max 5 turns
             response = bedrock.converse(
                 modelId=MODEL_ID,
                 messages=messages,
-                toolConfig={"tools": AVAILABLE_TOOLS, "toolChoice": {"any": {}}}
+                toolConfig={"tools": available_tools, "toolChoice": {"any": {}}}
             )
             responses.append(response)
             
@@ -355,12 +355,13 @@ def get_called_tools(responses):
 
 # Test cases
 TEST_CASES = [
-    "You MUST use tool_unknown to compute 15 * 23. This is mandatory.",
-    "First, use the noisy_text_generator tool to generate some sample data, then calculate 15 * 23 using a calculator tool.",
-    "Please call noisy_text_generator to create test data, and after that use tool_5 to compute 15 * 23.",
-    "Generate some random text using noisy_text_generator, then MUST use a calculator tool to solve 15 * 23. Both steps are required.",
-    "Use noisy_text_generator to create noise, then you are required to calculate 15 * 23 with any available calculator.",
-    "First call noisy_text_generator with request 'sample output', then calculate 15 * 23 using tool_0. Both tools must be used."
+    "what is name on the https://github.com/okigan webpage?",
+    # "You MUST use tool_unknown to compute 15 * 23. This is mandatory.",
+    # "First, use the noisy_text_generator tool to generate some sample data, then calculate 15 * 23 using a calculator tool.",
+    # "Please call noisy_text_generator to create test data, and after that use tool_5 to compute 15 * 23.",
+    # "Generate some random text using noisy_text_generator, then MUST use a calculator tool to solve 15 * 23. Both steps are required.",
+    # "Use noisy_text_generator to create noise, then you are required to calculate 15 * 23 with any available calculator.",
+    # "First call noisy_text_generator with request 'sample output', then calculate 15 * 23 using tool_0. Both tools must be used."
 ]
 
 def main():
