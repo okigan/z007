@@ -30,18 +30,6 @@ class ToolRegistry:
         self.mcp_servers: dict[str, subprocess.Popen[str]] = {}  # {server_name: process}
         self.mcp_tools: dict[str, str] = {}  # {tool_name: server_name}
     
-    def __enter__(self) -> 'ToolRegistry':
-        """Context manager entry"""
-        return self
-    
-    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> None:
-        """Context manager exit - automatically cleanup resources"""
-        try:
-            self.cleanup()
-        except Exception as e:
-            logger.error(f"Error during context manager cleanup: {e}")
-            # Don't suppress exceptions from the with block
-    
     def register(self, func: Callable[..., Any], **metadata: Any):
         """Register a function as a tool"""
         self.tools[func.__name__] = func
@@ -57,6 +45,13 @@ class ToolRegistry:
             with open(config_path) as f:
                 config = json.load(f)
             
+            self.load_mcp_config_dict(config)
+        except Exception as e:
+            logger.error(f"MCP config error: {e}")
+    
+    def load_mcp_config_dict(self, config: dict[str, Any]):
+        """Load MCP servers from config dictionary"""
+        try:
             for name, cfg in config.get("servers", {}).items():
                 command = cfg.get("command", [])
                 args = cfg.get("args", [])
@@ -348,92 +343,153 @@ class ToolRegistry:
         self.mcp_tools.clear()
 
 
-async def run_conversation(prompt: str, model_id: str, tool_registry: ToolRegistry, max_turns: int = 5) -> list[Any]:
-    """Run conversation with Bedrock - async tool execution using AnyIO"""
-    bedrock = Session().client("bedrock-runtime")
+class Agent:
+    """Streamlined Bedrock Agent with Pydantic AI-like interface"""
     
-    # Start with initial user message
-    messages = [{"role": "user", "content": [{"text": prompt}]}]
-    responses = []
-    
-    # Get tools in the format Bedrock expects
-    available_tools_raw = tool_registry.get_bedrock_specs()
-    available_tools = [{"toolSpec": tool["toolSpec"]} for tool in available_tools_raw]
-
-    for _ in range(max_turns):  # Max turns
-        tool_config = {
-            "tools": available_tools,
-            "toolChoice": {"any": {}}
-        }
+    def __init__(self, model_id: str, system_prompt: str | None = None, tools: list[Callable[..., Any]] | None = None, mcp_config: dict[str, Any] | None = None, max_turns: int = 5):
+        self.model_id = model_id
+        self.system_prompt = system_prompt
+        self.max_turns = max_turns
+        self.bedrock = Session().client("bedrock-runtime")
         
-        # Make bedrock call
-        response = await anyio.to_thread.run_sync(  # type: ignore
-            lambda: bedrock.converse(
-                modelId=model_id,
-                messages=messages,  # type: ignore
-                toolConfig=tool_config  # type: ignore
-            )
+        # Create internal tool registry
+        self._tool_registry = ToolRegistry()
+        
+        # Register provided tools
+        if tools:
+            for tool in tools:
+                self._tool_registry.register(tool)
+        
+        # Load MCP configuration if provided
+        if mcp_config:
+            self._tool_registry.load_mcp_config_dict(mcp_config)
+    
+    async def __aenter__(self) -> 'Agent':
+        """Async context manager entry"""
+        return self
+    
+    async def __aexit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> None:
+        """Async context manager exit - cleanup resources"""
+        try:
+            self._tool_registry.cleanup()
+        except Exception as e:
+            logger.error(f"Error during Agent cleanup: {e}")
+    
+    def __enter__(self) -> 'Agent':
+        """Sync context manager entry (for backward compatibility)"""
+        return self
+    
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> None:
+        """Sync context manager exit - cleanup resources"""
+        try:
+            self._tool_registry.cleanup()
+        except Exception as e:
+            logger.error(f"Error during Agent cleanup: {e}")
+    
+    def get_tool_counts(self) -> tuple[int, int, int]:
+        """Get tool counts (local, mcp_servers, mcp_tools)"""
+        return (
+            len(self._tool_registry.tools),
+            len(self._tool_registry.mcp_servers), 
+            len(self._tool_registry.mcp_tools)
         )
-        responses.append(response)
+    
+    async def run(self, prompt: str) -> str:
+        """Run a single conversation and return the final answer"""
+        responses = await self.run_conversation(prompt)
+        return extract_final_answer(responses[-1]) if responses else "No response"
+    
+    async def run_conversation(self, prompt: str) -> list[Any]:
+        """Run conversation with tool support - async tool execution using AnyIO"""
+        # Start with system prompt if provided
+        messages = []
+        if self.system_prompt:
+            messages.append({"role": "user", "content": [{"text": self.system_prompt}]})
+            messages.append({"role": "assistant", "content": [{"text": "Understood."}]})
         
-        # Check if we need to handle tool calls
-        stop_reason = response['stopReason']
-        if stop_reason == 'tool_use':
-            # Get the assistant's message with tool calls
-            output = response["output"]
-            assistant_msg = output["message"]
+        # Add user message
+        messages.append({"role": "user", "content": [{"text": prompt}]})
+        responses = []
+        
+        # Get tools in the format Bedrock expects
+        available_tools_raw = self._tool_registry.get_bedrock_specs()
+        available_tools = [{"toolSpec": tool["toolSpec"]} for tool in available_tools_raw]
 
-            if assistant_msg:
-                # Add assistant message to conversation
-                messages.append({
-                    "role": assistant_msg["role"],
-                    "content": assistant_msg["content"]
-                })
-                
-                # Extract tool calls
-                tool_calls = []
-                for item in assistant_msg['content']:
-                    if 'toolUse' in item:
-                        tool_use = item['toolUse']
-                        name = tool_use['name']
-                        input_data = tool_use['input']
-                        use_id = tool_use['toolUseId']
+        for _ in range(self.max_turns):
+            tool_config = {
+                "tools": available_tools,
+                "toolChoice": {"any": {}}
+            }
+            
+            # Make bedrock call
+            response = await anyio.to_thread.run_sync(  # type: ignore
+                lambda: self.bedrock.converse(
+                    modelId=self.model_id,
+                    messages=messages,  # type: ignore
+                    toolConfig=tool_config  # type: ignore
+                )
+            )
+            responses.append(response)
+            
+            # Check if we need to handle tool calls
+            stop_reason = response['stopReason']
+            if stop_reason == 'tool_use':
+                # Get the assistant's message with tool calls
+                output = response["output"]
+                assistant_msg = output["message"]
 
-                        if name and use_id:
-                            tool_calls.append((name, input_data, use_id))
-                
-                if tool_calls:
-                    # Execute all tools concurrently
-                    results = []
-                    
-                    async def execute_and_collect(name: str, input_data: dict[str, Any], use_id: str) -> None:
-                        result = await tool_registry.execute(name, input_data)
-                        results.append({
-                            "toolResult": {
-                                "toolUseId": use_id,
-                                "content": [{"text": result}]
-                            }
-                        })
-                    
-                    async with anyio.create_task_group() as tg:
-                        for name, input_data, use_id in tool_calls:
-                            tg.start_soon(execute_and_collect, name, input_data, use_id)
-                    
-                    # Add tool results to conversation
+                if assistant_msg:
+                    # Add assistant message to conversation
                     messages.append({
-                        "role": "user", 
-                        "content": results
+                        "role": assistant_msg["role"],
+                        "content": assistant_msg["content"]
                     })
+                    
+                    # Extract tool calls
+                    tool_calls = []
+                    for item in assistant_msg['content']:
+                        if 'toolUse' in item:
+                            tool_use = item['toolUse']
+                            name = tool_use['name']
+                            input_data = tool_use['input']
+                            use_id = tool_use['toolUseId']
+
+                            if name and use_id:
+                                tool_calls.append((name, input_data, use_id))
+                    
+                    if tool_calls:
+                        # Execute all tools concurrently
+                        results = []
+                        
+                        async def execute_and_collect(name: str, input_data: dict[str, Any], use_id: str) -> None:
+                            result = await self._tool_registry.execute(name, input_data)
+                            results.append({
+                                "toolResult": {
+                                    "toolUseId": use_id,
+                                    "content": [{"text": result}]
+                                }
+                            })
+                        
+                        async with anyio.create_task_group() as tg:
+                            for name, input_data, use_id in tool_calls:
+                                tg.start_soon(execute_and_collect, name, input_data, use_id)
+                        
+                        # Add tool results to conversation
+                        messages.append({
+                            "role": "user", 
+                            "content": results
+                        })
+                    else:
+                        break
                 else:
+                    logger.debug(f"No assistant message found in response: {response}")
                     break
             else:
-                logger.debug(f"No assistant message found in response: {response}")
+                logger.debug(f"Conversation ended with stop reason: {stop_reason}")
                 break
-        else:
-            logger.debug(f"Conversation ended with stop reason: {stop_reason}")
-            break
-    
-    return responses
+        
+        return responses
+
 
 def extract_final_answer(response: Any) -> str:
     """Extract final answer from response"""
@@ -465,9 +521,9 @@ def get_called_tools(responses: list[Any]) -> list[str]:
             continue
     return tools
 
-def create_tool_registry() -> ToolRegistry:
-    """Create and configure the tool registry with all tools"""
-    registry = ToolRegistry()
+def create_tools() -> list[Callable[..., Any]]:
+    """Create and return list of tool functions"""
+    tools = []
     
     # Simple tool functions
     def calculator_tool(expression: str) -> str:
@@ -498,9 +554,8 @@ RANDOM_SYMBOLS: ◊Ω≈ç√∫˜µ≤≥÷æ…¬Ω≈ç√∫˜
 {noise_chars}
 FINAL_NOISE_BLOCK_{noise_chars}_COMPLETE"""
 
-    # Register basic tools
-    registry.register(calculator_tool)
-    registry.register(noisy_text_generator)
+    # Add basic tools
+    tools.extend([calculator_tool, noisy_text_generator])
 
     # Generate 50 dummy calculator tools
     NUM_TOOLS = 50
@@ -519,9 +574,22 @@ FINAL_NOISE_BLOCK_{noise_chars}_COMPLETE"""
             tool_func.__doc__ = f"Calculator tool {tool_id} - performs mathematical calculations"
             return tool_func
         
-        registry.register(make_tool(i))
+        tools.append(make_tool(i))
     
-    return registry
+    return tools
+
+
+def load_mcp_config_from_file(config_path: str) -> dict[str, Any] | None:
+    """Load MCP configuration from JSON file"""
+    try:
+        if not Path(config_path).exists():
+            return None
+        
+        with open(config_path) as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading MCP config from {config_path}: {e}")
+        return None
 
 
 # Test cases
@@ -543,21 +611,28 @@ async def async_main() -> None:
     logger.info("=== Streamlined Tool Stress Test ===")
     logger.info(f"Model: {model_id}")
 
-    # Create and configure tool registry using context manager
-    with create_tool_registry() as tool_registry:
-        tool_registry.load_mcp_config("./.vscode/mcp.json")
+    # Create tools and agent with new API
+    tools = create_tools()
+    mcp_config = load_mcp_config_from_file("./.vscode/mcp.json")
+    
+    async with Agent(
+        model_id=model_id,
+        system_prompt="You are a helpful assistant with access to various tools.",
+        tools=tools,
+        mcp_config=mcp_config,
+        max_turns=5
+    ) as agent:
         
         # Show tool counts
-        local_count = len(tool_registry.tools)
-        mcp_server_count = len(tool_registry.mcp_servers)
-        mcp_tools_count = len(tool_registry.mcp_tools)
+        local_count, mcp_server_count, mcp_tools_count = agent.get_tool_counts()
         logger.info(f"Tools: {local_count} local + {mcp_tools_count} MCP from {mcp_server_count} servers = {local_count + mcp_tools_count} total")
         
         for i, test_case in enumerate(TEST_CASES):
             logger.info(f"--- Test {i+1} ---")
             logger.info(f"Prompt: {test_case}")
             
-            responses = await run_conversation(test_case, model_id, tool_registry)
+            # Use the new Agent API
+            responses = await agent.run_conversation(test_case)
             last_response = responses[-1] if responses else None
             
             print(f"Answer: {extract_final_answer(last_response) if last_response else 'No response'}")
