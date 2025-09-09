@@ -162,7 +162,9 @@ async with Agent(
 
 For AWS Bedrock (default provider):
 - `AWS_PROFILE`: AWS profile name
+
   **or**
+
 - `AWS_REGION`: AWS region (default: us-east-1)
 - `AWS_ACCESS_KEY_ID`: AWS access key
 - `AWS_SECRET_ACCESS_KEY`: AWS secret key
@@ -190,7 +192,3 @@ When running `z007` in interactive mode:
 ## License
 
 MIT License
-
----
-
-**z007** ⚡ Fast, lightweight, powerful. Get things done quickly! 🚀
