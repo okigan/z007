@@ -65,10 +65,14 @@ def create_tools() -> list[Callable[..., Any]]:
 
 def find_mcp_config_file() -> str | None:
     """Find the first existing MCP config file from possible locations"""
+    # Get the directory where this script is located
+    script_dir = Path(__file__).parent
+    
     possible_paths = [
         "./mcp.json",
         "./.vscode/mcp.json",
         "~/mcp.json",
+        str(script_dir / "mcp.json"),  # Packaged mcp.json in the same directory as this script
     ]
     
     for path in possible_paths:

@@ -1,15 +1,18 @@
 # z007 ⚡ Fast Micro Agent
 
+*Pronounced as "ze double O 7"*
+
 A lightweight and readable agent for interacting with LLM on AWS Bedrock with tool and MCP (Model Context Protocol) support.
 
 ## Features
 
-- ⚡ **Lightning Fast**: Quick setup with `uvx z007`  with `AWS_PROFILE=<your profile>` env and start chatting instantly  
-- ⚡ **Simple Install**: Quick install  `uv tool install z007` and start chatting instantly `z007` with `AWS_PROFILE=<your profile>` env
+- **Ultra Readable**: Clean, maintainable codebase in ~500 lines - easy to understand, modify, and extend
+- ⚡ **Lightning Fast**: Quick setup with `uvx z007`  with `AWS_PROFILE=<your profile>` in env and start chatting instantly  
+- ⚡ **Simple Install**: Quick install  `uv tool install --upgrade z007` and start chatting instantly `z007` with `AWS_PROFILE=<your profile>` in env
 - 🔧 **Tool Support**: Built-in calculator and custom tool integration
 - 🔌 **MCP Integration**: Connect to Model Context Protocol servers
 - 🐍 **Python API**: Easy integration into your Python projects
-- 🚀 **Async**: Fast, concurrent tool execution
+- 🚀 **Async**: Concurrent tool execution
 
 ## Quick Start
 
