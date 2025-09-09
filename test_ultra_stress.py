@@ -61,6 +61,15 @@ class ToolRegistry:
             if process.poll() is not None:
                 print(f"✗ MCP '{name}' failed to start")
                 return
+
+            # Check if stdin is available
+            if process.stdin is None:
+                print(f"✗ MCP '{name}' stdin not available")
+                return
+
+            if process.stdout is None:
+                print(f"✗ MCP '{name}' stdout not available")
+                return
             
             self.mcp_servers[name] = process
             
