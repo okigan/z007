@@ -67,18 +67,11 @@ class ToolRegistry:
         import os
         
         try:
-            # Expand shell variables in command arguments
+            # Expand shell variables in command arguments using os.path.expandvars
             expanded_command = []
             for arg in command:
-                if arg.startswith("${") and arg.endswith("}"):
-                    # Handle ${VARIABLE} format
-                    var_name = arg[2:-1]
-                    if var_name.startswith("env:"):
-                        var_name = var_name[4:]
-                    expanded_value = os.environ.get(var_name, arg)  # fallback to original if not found
-                    expanded_command.append(expanded_value)
-                else:
-                    expanded_command.append(arg)
+                expanded_arg = os.path.expandvars(arg)
+                expanded_command.append(expanded_arg)
             
             # Prepare environment with config variables
             env = os.environ.copy()
@@ -91,6 +84,7 @@ class ToolRegistry:
                     else:
                         env[key] = value
             
+            logger.warning(f"Starting MCP server '{name}' with command: {' '.join(expanded_command)}")
             process = subprocess.Popen(expanded_command, 
                                        stdin=subprocess.PIPE, 
                                        stdout=subprocess.PIPE, 
@@ -391,6 +385,13 @@ class Agent:
             len(self._tool_registry.tools),
             len(self._tool_registry.mcp_servers), 
             len(self._tool_registry.mcp_tools)
+        )
+    
+    def get_tool_names(self) -> tuple[list[str], list[str]]:
+        """Get tool names (local_tools, mcp_tools)"""
+        return (
+            list(self._tool_registry.tools.keys()),
+            list(self._tool_registry.mcp_tools.keys())
         )
     
     async def run(self, prompt: str) -> str:
