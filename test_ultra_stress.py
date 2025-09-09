@@ -85,7 +85,7 @@ class ToolRegistry:
             
             # Send MCP protocol messages
             msgs = [
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}}},
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "clientInfo": {"name": "aws-bedrock-gpt-oss-tester", "version": "1.0.0"}}},
                 {"jsonrpc": "2.0", "method": "notifications/initialized"},
                 {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
             ]
@@ -94,14 +94,24 @@ class ToolRegistry:
                 process.stdin.write(json.dumps(msg) + "\n")
             process.stdin.flush()
             
-            # Read tools response
+            # Read responses - handle initialization response and tools list response
             tools_count = 0
             start_time = time.time()
+            initialization_received = False
+            
             while time.time() - start_time < 5:  # 5 second timeout
                 if select.select([process.stdout], [], [], 0.1)[0]:
                     try:
                         response = json.loads(process.stdout.readline())
-                        if "result" in response and "tools" in response.get("result", {}):
+                        
+                        # Handle initialization response
+                        if not initialization_received and response.get("id") == 1 and "result" in response:
+                            initialization_received = True
+                            logger.debug(f"MCP '{name}' initialized successfully")
+                            continue
+                        
+                        # Handle tools list response
+                        elif response.get("id") == 2 and "result" in response and "tools" in response.get("result", {}):
                             for tool in response["result"]["tools"]:
                                 tool_name = tool["name"]
                                 self.mcp_tools[tool_name] = name
@@ -113,12 +123,25 @@ class ToolRegistry:
                                 tools_count += 1
                             logger.info(f"Loaded {tools_count} tools from MCP '{name}'")
                             return
-                    except (json.JSONDecodeError, KeyError):
+                        
+                        # Handle errors
+                        elif "error" in response:
+                            logger.error(f"MCP '{name}' error: {response['error']}")
+                            return
+                        
+                        # Log other responses for debugging
+                        else:
+                            logger.debug(f"MCP '{name}' response: {response}")
+                            
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.debug(f"MCP '{name}' JSON decode error: {e}")
                         continue
+                        
                 if process.poll() is not None:
+                    logger.error(f"MCP '{name}' process terminated unexpectedly")
                     break
             
-            logger.error(f"MCP '{name}' timeout")
+            logger.error(f"MCP '{name}' timeout waiting for tools list")
         except Exception as e:
             logger.error(f"MCP '{name}' error: {e}")
     
