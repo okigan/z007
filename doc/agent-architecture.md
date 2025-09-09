@@ -13,11 +13,7 @@ The `z007` agent (~600 lines) demonstrates that effective AI agents operate on t
 3. **Repeat until the conversation teminates**
 
 ## Demo
-
-<video width="800" controls>
-  <source src="./demo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+![demo gif](./demo.gif "Optional title text")
 
 ## Start the Agent
 ```bash
