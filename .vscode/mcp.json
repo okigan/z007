@@ -10,11 +10,10 @@
             "command": "node",
             "args": [
                 "/Users/igor.okulist/Projects/cr-partner-cattalyst-service/src/functions/slackbot/static/firehydrant-mcp/mcp-server.mjs",
-                "start"
-            ],
-            "env": {
-                "FIREHYDRANT_API_KEY": "${env:FIREHYDRANT_API_KEY}"
-            }
+                "start",
+                "--api-key",
+                "${FIREHYDRANT_API_KEY}"
+            ]
         }
     },
     "inputs": []

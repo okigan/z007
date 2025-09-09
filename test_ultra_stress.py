@@ -60,16 +60,44 @@ class ToolRegistry:
             for name, cfg in config.get("servers", {}).items():
                 command = cfg.get("command", [])
                 args = cfg.get("args", [])
+                env_vars = cfg.get("env", {})
+                
                 if command:
                     full_cmd = [command] + args if isinstance(command, str) else command + args
-                    self._start_mcp_server(name, full_cmd)
+                    self._start_mcp_server(name, full_cmd, env_vars)
         except Exception as e:
             logger.error(f"MCP config error: {e}")
     
-    def _start_mcp_server(self, name: str, command: list[str]) -> None:
+    def _start_mcp_server(self, name: str, command: list[str], env_vars: dict[str, str] | None = None) -> None:
         """Start MCP server and load tools"""
+        import os
+        
         try:
-            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            # Expand shell variables in command arguments
+            expanded_command = []
+            for arg in command:
+                if arg.startswith("${") and arg.endswith("}"):
+                    # Handle ${VARIABLE} format
+                    var_name = arg[2:-1]
+                    if var_name.startswith("env:"):
+                        var_name = var_name[4:]
+                    expanded_value = os.environ.get(var_name, arg)  # fallback to original if not found
+                    expanded_command.append(expanded_value)
+                else:
+                    expanded_command.append(arg)
+            
+            # Prepare environment with config variables
+            env = os.environ.copy()
+            if env_vars:
+                for key, value in env_vars.items():
+                    if value.startswith("${env:") and value.endswith("}"):
+                        env_var = value[6:-1]
+                        if env_var in os.environ:
+                            env[key] = os.environ[env_var]
+                    else:
+                        env[key] = value
+            
+            process = subprocess.Popen(expanded_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
             time.sleep(0.5)
             
             if (return_code := process.poll()) is not None:
@@ -99,7 +127,7 @@ class ToolRegistry:
             start_time = time.time()
             initialization_received = False
             
-            while time.time() - start_time < 5:  # 5 second timeout
+            while time.time() - start_time < 50:  # 5 second timeout
                 if select.select([process.stdout], [], [], 0.1)[0]:
                     try:
                         response = json.loads(process.stdout.readline())
@@ -492,7 +520,9 @@ FINAL_NOISE_BLOCK_{noise_chars}_COMPLETE"""
 
 # Test cases
 TEST_CASES = [
-    "what is name on the https://github.com/okigan webpage?",
+    # "list firehydrant tools",
+    "list current incidents",
+    # "what is name on the https://github.com/okigan webpage?",
     # "You MUST use tool_unknown to compute 15 * 23. This is mandatory.",
     # "First, use the noisy_text_generator tool to generate some sample data, then calculate 15 * 23 using a calculator tool.",
     # "Please call noisy_text_generator to create test data, and after that use tool_5 to compute 15 * 23.",

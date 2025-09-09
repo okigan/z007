@@ -1,13 +1,8 @@
 {
     "python.analysis.typeCheckingMode": "strict",
-    "python.analysis.autoImportCompletions": true,
     "python.analysis.diagnosticMode": "workspace",
-    "python.analysis.inlayHints.functionReturnTypes": true,
-    "python.analysis.inlayHints.variableTypes": true,
-    "python.analysis.inlayHints.pytestParameters": true,
     "python.analysis.stubPath": "",
     "python.analysis.extraPaths": [],
-    // Suppress common boto3/AWS SDK type issues
     "python.analysis.diagnosticSeverityOverrides": {
         "reportUnknownMemberType": "none",
         "reportUnknownVariableType": "none",

@@ -9,9 +9,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
-            "env": {
-                "AWS_PROFILE": "codemobs"
-            }
+            "envFile": "${workspaceFolder}/.env"
         }
     ]
 }
