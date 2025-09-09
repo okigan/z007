@@ -7,5 +7,11 @@
         "reportUnknownMemberType": "none",
         "reportUnknownVariableType": "none",
         "reportUnknownArgumentType": "none"
+    },
+    "terminal.integrated.env.osx": {
+        "PATH": "/Users/igor.okulist/.nvm/versions/node/v20.19.4/bin:${env:PATH}"
+    },
+    "mcp.env": {
+        "PATH": "/Users/igor.okulist/.nvm/versions/node/v20.19.4/bin:${env:PATH}"
     }
 }

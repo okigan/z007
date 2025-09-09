@@ -1,19 +1,21 @@
 {
     "servers": {
         "playwright": {
-            "command": "npx",
+            "command": "/Users/igor.okulist/.nvm/versions/node/v20.19.4/bin/node",
             "args": [
+                "/Users/igor.okulist/.nvm/versions/node/v20.19.4/lib/node_modules/npm/bin/npx-cli.js",
                 "@playwright/mcp@latest"
             ]
         },
         "firehydrant": {
-            "command": "node",
+            "command": "/Users/igor.okulist/.nvm/versions/node/v20.19.4/bin/node",
             "args": [
                 "/Users/igor.okulist/Projects/cr-partner-cattalyst-service/src/functions/slackbot/static/firehydrant-mcp/mcp-server.mjs",
                 "start",
                 "--api-key",
                 "${FIREHYDRANT_API_KEY}"
-            ]
+            ],
+            "envFile": "${workspaceFolder}/.env"
         }
     },
     "inputs": []

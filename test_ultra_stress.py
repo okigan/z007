@@ -97,7 +97,13 @@ class ToolRegistry:
                     else:
                         env[key] = value
             
-            process = subprocess.Popen(expanded_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
+            process = subprocess.Popen(expanded_command, 
+                                       stdin=subprocess.PIPE, 
+                                       stdout=subprocess.PIPE, 
+                                        stderr=subprocess.PIPE,
+                                       text=True, 
+                                       env=env,
+                                       )
             time.sleep(0.5)
             
             if (return_code := process.poll()) is not None:
