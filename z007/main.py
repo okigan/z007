@@ -6,6 +6,7 @@ z007 - Fast Micro Agent Interactive REPL
 import json
 import anyio
 import colorlog
+import logging
 import sys
 
 from pathlib import Path
@@ -18,6 +19,7 @@ load_dotenv()
 
 # Set up colored logging
 colorlog.basicConfig(format='%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
+logging.getLogger().setLevel(logging.INFO)
 logger = colorlog.getLogger(__name__)
 
 
@@ -59,6 +61,22 @@ def create_tools() -> list[Callable[..., Any]]:
     tools.extend([calculator_tool])
     
     return tools
+
+
+def find_mcp_config_file() -> str | None:
+    """Find the first existing MCP config file from possible locations"""
+    possible_paths = [
+        "./mcp.json",
+        "./.vscode/mcp.json",
+        "~/mcp.json",
+    ]
+    
+    for path in possible_paths:
+        expanded_path = Path(path).expanduser()
+        if expanded_path.exists():
+            return str(expanded_path)
+    
+    return None
 
 
 def load_mcp_config_from_file(config_path: str) -> dict[str, Any] | None:
@@ -107,10 +125,14 @@ def print_tools_info(agent: Agent):
 async def async_main() -> None:
     """Main REPL function"""
     model_id = "openai.gpt-oss-20b-1:0"
-    mcp_config_filepath = "./.vscode/mcp.json"
+    mcp_config_filepath = find_mcp_config_file()
 
     print("Starting z007 - Fast Micro Agent...")
     logger.info(f"Model: {model_id}")
+    if mcp_config_filepath:
+        logger.info(f"Using MCP config: {mcp_config_filepath}")
+    else:
+        logger.info("No MCP config file found")
 
     # Create tools and agent
     tools = create_tools()
@@ -120,7 +142,7 @@ async def async_main() -> None:
             model_id=model_id,
             system_prompt="You are a helpful assistant with access to various tools. Be concise but informative in your responses.",
             tools=tools,
-            mcp_config=load_mcp_config_from_file(mcp_config_filepath) if Path(mcp_config_filepath).exists() else None,
+            mcp_config=load_mcp_config_from_file(mcp_config_filepath) if mcp_config_filepath else None,
             max_turns=10  # Allow more turns for interactive conversation
         ) as agent:
             
