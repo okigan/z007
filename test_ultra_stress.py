@@ -33,9 +33,29 @@ for i in range(NUM_TOOLS):
     }
     AVAILABLE_TOOLS.append(tool)
 
-def execute_tool(tool_name, tool_input):
-    """Actually execute the specified tool"""
-    # Extract the expression from input
+# Add a noisy tool that returns extraneous characters
+NOISY_TOOL = {
+    "toolSpec": {
+        "name": "noisy_text_generator",
+        "description": "Generates random text and noise - useful for creating sample data or testing",
+        "inputSchema": {
+            "json": {
+                "type": "object",
+                "properties": {
+                    "request": {
+                        "type": "string",
+                        "description": "What kind of text or data to generate"
+                    }
+                },
+                "required": ["request"]
+            }
+        }
+    }
+}
+AVAILABLE_TOOLS.append(NOISY_TOOL)
+
+def execute_calculator_tool(tool_input):
+    """Execute calculator tool functionality"""
     expression = tool_input.get('expression', '')
     
     # Simple calculator implementation
@@ -50,6 +70,43 @@ def execute_tool(tool_name, tool_input):
             return "Error: Invalid expression"
     except Exception:
         return "Error: Could not evaluate expression"
+
+def execute_noisy_tool(tool_input):
+    """Execute noisy text generator tool - returns lots of extraneous characters"""
+    import random
+    import string
+    
+    request = tool_input.get('request', 'generate text')
+    
+    # Generate noisy output with various extraneous characters
+    noise_chars = "!@#$%^&*()[]{}|\\:;\"'<>,.?/~`"
+    random_noise = ''.join(random.choices(noise_chars + string.ascii_letters + string.digits + ' \n\t', k=200))
+    
+    # Mix in some actual response
+    actual_response = f"Generated text based on request: {request}"
+    
+    # Create noisy output
+    noisy_output = f"""
+NOISE_START_{random_noise[:50]}_NOISE_MID
+{actual_response}
+EXTRA_CHARS: ¡™£¢∞§¶•ªº–≠œ∑´®†¥¨ˆøπ"'«åß∂ƒ©˙∆˚¬…æΩ≈ç√∫˜µ≤≥÷
+MORE_NOISE_{random_noise[50:100]}_END_NOISE
+RANDOM_SYMBOLS: ◊Ω≈ç√∫˜µ≤≥÷æ…¬Ω≈ç√∫˜
+{random_noise[100:150]}
+FINAL_NOISE_BLOCK_{random_noise[150:]}_COMPLETE
+"""
+    
+    return noisy_output
+
+def execute_tool(tool_name, tool_input):
+    """Actually execute the specified tool using dedicated functions"""
+    if tool_name.startswith('tool_'):
+        # All calculator tools use the same function
+        return execute_calculator_tool(tool_input)
+    elif tool_name == 'noisy_text_generator':
+        return execute_noisy_tool(tool_input)
+    else:
+        return f"Error: Unknown tool {tool_name}"
 
 def test_with_many_tools(prompt) -> list:
     """Test with many tools and handle full conversation flow with actual tool execution"""
@@ -175,35 +232,46 @@ def get_all_called_tools(responses):
 
 # Test cases designed to trigger calls to non-existent tools
 TEST_CASES = [
-    # Force tool usage with explicit requirement
-    "You MUST use a calculator tool to compute 15 * 23. Do not calculate manually.",
+    # # Force tool usage with explicit requirement
+    # "You MUST use a calculator tool to compute 15 * 23. Do not calculate manually.",
     
-    # Request for specific numbered tools (some may not exist in prompts)
-    "You are required to use tool_0 to solve this problem: 15 * 23",
+    # # Request for specific numbered tools (some may not exist in prompts)
+    # "You are required to use tool_0 to solve this problem: 15 * 23",
     
-    # Request that might confuse the model about available tools
-    "You MUST use tool_100 to calculate 15 * 23. This is mandatory.",
+    # # Request that might confuse the model about available tools
+    # "You MUST use tool_100 to calculate 15 * 23. This is mandatory.",
     
-    # Force tool usage with explicit requirement
-    "Use any calculator tool available to compute 15 * 23. Tool usage is required.",
+    # # Force tool usage with explicit requirement
+    # "Use any calculator tool available to compute 15 * 23. Tool usage is required.",
     
-    # Request for tools with similar names - force usage
-    "You MUST use calc_tool to solve 15 * 23. Tool usage is mandatory.",
+    # # Request for tools with similar names - force usage
+    # "You MUST use calc_tool to solve 15 * 23. Tool usage is mandatory.",
     
-    # Force usage of specific tools
-    "You are required to use tool_0 to calculate 15 * 23",
+    # # Force usage of specific tools
+    # "You are required to use tool_0 to calculate 15 * 23",
     
-    # Request for non-existent tool patterns with force
-    "You MUST use tool_calculate to solve 15 * 23. This is required.",
+    # # Request for non-existent tool patterns with force
+    # "You MUST use tool_calculate to solve 15 * 23. This is required.",
     
     # Mixed existing and non-existing tools with force
-    "You MUST use tool_unknown to compute 15 * 23. This is mandatory."
+    "You MUST use tool_unknown to compute 15 * 23. This is mandatory.",
+    
+    # Test cases with noisy tool followed by calculation request
+    "First, use the noisy_text_generator tool to generate some sample data, then calculate 15 * 23 using a calculator tool.",
+    
+    "Please call noisy_text_generator to create test data, and after that use tool_5 to compute 15 * 23.",
+    
+    "Generate some random text using noisy_text_generator, then MUST use a calculator tool to solve 15 * 23. Both steps are required.",
+    
+    "Use noisy_text_generator to create noise, then you are required to calculate 15 * 23 with any available calculator.",
+    
+    "First call noisy_text_generator with request 'sample output', then calculate 15 * 23 using tool_0. Both tools must be used."
 ]
 
 def main():
     print("=== Test for Non-Existent Tool Calls ===")
     print(f"Model: {MODEL_ID}")
-    print(f"Available tools: tool_0 through tool_{NUM_TOOLS-1}")
+    print(f"Available tools: tool_0 through tool_{NUM_TOOLS-1}, noisy_text_generator")
     print()
         
     for i, test_case in enumerate(TEST_CASES):
@@ -232,6 +300,7 @@ def main():
     
     print("=== Final Summary ===")
     print(f"Total tests: {len(TEST_CASES)}")
+    print(f"Available tools: tool_0 through tool_{NUM_TOOLS-1}, noisy_text_generator")
 
 if __name__ == "__main__":
     main()
