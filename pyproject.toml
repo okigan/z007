@@ -14,6 +14,7 @@ dependencies = [
     "botocore",
     "colorlog>=6.9.0",
     "pydantic-ai",
+    "python-dotenv>=1.0.0",
 ]
 
 [dependency-groups]

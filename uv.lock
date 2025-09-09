@@ -222,6 +222,7 @@ dependencies = [
     { name = "botocore" },
     { name = "colorlog" },
     { name = "pydantic-ai" },
+    { name = "python-dotenv" },
 ]
 
 [package.dev-dependencies]
@@ -240,6 +241,7 @@ requires-dist = [
     { name = "botocore" },
     { name = "colorlog", specifier = ">=6.9.0" },
     { name = "pydantic-ai" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 
 [package.metadata.requires-dev]
