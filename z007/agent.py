@@ -30,9 +30,7 @@ class ToolRegistry:
     def __init__(self) -> None:
         self.tools: dict[str, Callable[..., Any]] = {}  # {tool_name: function}
         self.tool_metadata: dict[str, dict[str, Any]] = {}  # {tool_name: metadata}
-        self.mcp_servers: dict[
-            str, subprocess.Popen[str]
-        ] = {}  # {server_name: process}
+        self.mcp_servers: dict[str, subprocess.Popen[str]] = {}  # {server_name: process}
         self.mcp_tools: dict[str, str] = {}  # {tool_name: server_name}
 
     def register(self, func: Callable[..., Any], **metadata: Any):
@@ -64,17 +62,13 @@ class ToolRegistry:
                 env_vars = cfg.get("env", {})
 
                 if command:
-                    full_cmd = (
-                        [command, *args] if isinstance(command, str) else command + args
-                    )
+                    full_cmd = [command, *args] if isinstance(command, str) else command + args
                     self._start_mcp_server(name, full_cmd, env_vars)
         except Exception as e:
             logger.error(f"MCP config error: {e}")
             raise ToolExecutionError(f"Failed to load MCP config: {e}")
 
-    def _start_mcp_server(
-        self, name: str, command: list[str], env_vars: dict[str, str] | None = None
-    ) -> None:
+    def _start_mcp_server(self, name: str, command: list[str], env_vars: dict[str, str] | None = None) -> None:
         """Start MCP server and load tools"""
         import os
 
@@ -96,9 +90,7 @@ class ToolRegistry:
                     else:
                         env[key] = value
 
-            logger.info(
-                f"Starting MCP server '{name}' with command: {' '.join(expanded_command)}"
-            )
+            logger.info(f"Starting MCP server '{name}' with command: {' '.join(expanded_command)}")
             process = subprocess.Popen(
                 expanded_command,
                 stdin=subprocess.PIPE,
@@ -110,9 +102,7 @@ class ToolRegistry:
             time.sleep(0.5)
 
             if (return_code := process.poll()) is not None:
-                error_msg = (
-                    f"MCP '{name}' failed to start with return code {return_code}"
-                )
+                error_msg = f"MCP '{name}' failed to start with return code {return_code}"
                 logger.error(error_msg)
                 raise ToolExecutionError(error_msg)
 
@@ -155,28 +145,18 @@ class ToolRegistry:
                         response = json.loads(process.stdout.readline())
 
                         # Handle initialization response
-                        if (
-                            not initialization_received
-                            and response.get("id") == 1
-                            and "result" in response
-                        ):
+                        if not initialization_received and response.get("id") == 1 and "result" in response:
                             initialization_received = True
                             logger.debug(f"MCP '{name}' initialized successfully")
                             continue
 
                         # Handle tools list response
-                        if (
-                            response.get("id") == 2
-                            and "result" in response
-                            and "tools" in response.get("result", {})
-                        ):
+                        if response.get("id") == 2 and "result" in response and "tools" in response.get("result", {}):
                             for tool in response["result"]["tools"]:
                                 tool_name = tool["name"]
                                 self.mcp_tools[tool_name] = name
                                 self.tool_metadata[tool_name] = {
-                                    "description": tool.get(
-                                        "description", f"MCP: {tool_name}"
-                                    ),
+                                    "description": tool.get("description", f"MCP: {tool_name}"),
                                     "mcp_schema": tool.get("inputSchema", {}),
                                     "is_mcp": True,
                                 }
@@ -219,9 +199,7 @@ class ToolRegistry:
             if tool_name in self.tools:
                 func = self.tools[tool_name]
                 sig = inspect.signature(func)
-                kwargs = {
-                    p: tool_input.get(p) for p in sig.parameters if p in tool_input
-                }
+                kwargs = {p: tool_input.get(p) for p in sig.parameters if p in tool_input}
 
                 # Run sync function in thread using AnyIO
                 def call_with_kwargs() -> Any:
@@ -244,9 +222,7 @@ class ToolRegistry:
 
             # Check if stdin and stdout are available
             if process.stdin is None or process.stdout is None:
-                raise ToolExecutionError(
-                    f"Process streams not available for {tool_name}"
-                )
+                raise ToolExecutionError(f"Process streams not available for {tool_name}")
 
             request = {
                 "jsonrpc": "2.0",
@@ -270,9 +246,7 @@ class ToolRegistry:
                                 return str(content[0].get("text", content[0]))
                             return "No content"
                         if "error" in response:
-                            raise ToolExecutionError(
-                                f"MCP Error: {response['error'].get('message', 'Unknown')}"
-                            )
+                            raise ToolExecutionError(f"MCP Error: {response['error'].get('message', 'Unknown')}")
                     except (json.JSONDecodeError, KeyError):
                         continue
                 if process.poll() is not None:
@@ -283,13 +257,9 @@ class ToolRegistry:
                 raise
             raise ToolExecutionError(f"MCP execution failed for {tool_name}: {e}")
 
-    async def _execute_mcp_async(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> str:
+    async def _execute_mcp_async(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         """Execute MCP tool asynchronously"""
-        return await anyio.to_thread.run_sync(
-            self._execute_mcp_sync, tool_name, tool_input
-        )  # type: ignore
+        return await anyio.to_thread.run_sync(self._execute_mcp_sync, tool_name, tool_input)  # type: ignore
 
     def get_bedrock_specs(self) -> list[dict[str, Any]]:
         """Get all tools as Bedrock specifications"""
@@ -348,9 +318,7 @@ class ToolRegistry:
                     "toolSpec": {
                         "name": name,
                         "description": metadata.get("description", f"MCP: {name}"),
-                        "inputSchema": {
-                            "json": mcp_schema or {"type": "object", "properties": {}}
-                        },
+                        "inputSchema": {"json": mcp_schema or {"type": "object", "properties": {}}},
                     }
                 }
             )
@@ -472,14 +440,10 @@ class Agent:
     ) -> list[dict[str, Any]]:
         """Execute all tools concurrently and return results"""
 
-        async def execute_single_tool(
-            name: str, input_data: dict[str, Any], use_id: str
-        ) -> dict[str, Any]:
+        async def execute_single_tool(name: str, input_data: dict[str, Any], use_id: str) -> dict[str, Any]:
             try:
                 result = await self._tool_registry.execute(name, input_data)
-                return {
-                    "toolResult": {"toolUseId": use_id, "content": [{"text": result}]}
-                }
+                return {"toolResult": {"toolUseId": use_id, "content": [{"text": result}]}}
             except Exception as e:
                 logger.error(f"Tool execution failed: {e}")
                 return {
@@ -515,9 +479,7 @@ class Agent:
 
         # Get tools in the format Bedrock expects
         available_tools_raw = self._tool_registry.get_bedrock_specs()
-        available_tools = [
-            {"toolSpec": tool["toolSpec"]} for tool in available_tools_raw
-        ]
+        available_tools = [{"toolSpec": tool["toolSpec"]} for tool in available_tools_raw]
 
         for turn_num in range(self.max_turns):
             tool_config = {"tools": available_tools, "toolChoice": {"any": {}}}
@@ -572,9 +534,7 @@ class Agent:
                                 if name and use_id:
                                     tool_calls.append((name, input_data, use_id))
                             else:
-                                logger.warning(
-                                    f"Unknown item in assistant message content: {item}"
-                                )
+                                logger.warning(f"Unknown item in assistant message content: {item}")
 
                         if tool_calls:
                             # Execute all tools concurrently and collect results
@@ -583,14 +543,10 @@ class Agent:
                             # Add tool results to conversation
                             messages.append({"role": "user", "content": results})
                         else:
-                            logger.warning(
-                                "No tool calls found despite tool_use stop reason"
-                            )
+                            logger.warning("No tool calls found despite tool_use stop reason")
                             break
                     else:
-                        logger.debug(
-                            f"No assistant message found in response: {response}"
-                        )
+                        logger.debug(f"No assistant message found in response: {response}")
                         break
                 else:
                     logger.debug(f"Conversation ended with stop reason: {stop_reason}")

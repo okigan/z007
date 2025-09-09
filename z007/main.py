@@ -95,9 +95,7 @@ def find_mcp_config_file() -> str | None:
         "./mcp.json",
         "./.vscode/mcp.json",
         "~/mcp.json",
-        str(
-            script_dir / "mcp.json"
-        ),  # Packaged mcp.json in the same directory as this script
+        str(script_dir / "mcp.json"),  # Packaged mcp.json in the same directory as this script
     ]
 
     for path in possible_paths:
@@ -130,9 +128,7 @@ def print_help():
     print("  [green]/clear[/green]    - Clear conversation history")
     print("  [green]/exit[/green]     - Exit the REPL")
     print("\nJust type your message to chat with the AI assistant.")
-    print(
-        "The assistant has access to various tools including calculators and MCP tools.\n"
-    )
+    print("The assistant has access to various tools including calculators and MCP tools.\n")
 
 
 def print_tools_info(agent: Agent):
@@ -173,9 +169,7 @@ async def async_main() -> None:
             model_id=model_id,
             system_prompt="You are a helpful assistant with access to various tools. Be concise but informative in your responses.",
             tools=tools,
-            mcp_config=load_mcp_config_from_file(mcp_config_filepath)
-            if mcp_config_filepath
-            else None,
+            mcp_config=load_mcp_config_from_file(mcp_config_filepath) if mcp_config_filepath else None,
             max_turns=10,
         ) as agent:
             # Show initial info
@@ -215,9 +209,7 @@ async def async_main() -> None:
                             print("[yellow]Conversation history cleared.[/yellow]")
                             continue
                         logger.warning(f"[REPL] Unknown command: {user_input}")
-                        print(
-                            f"[red]Unknown command:[/red] {user_input}. Type /help for available commands."
-                        )
+                        print(f"[red]Unknown command:[/red] {user_input}. Type /help for available commands.")
                         continue
 
                     # Process user message
@@ -227,11 +219,7 @@ async def async_main() -> None:
                     last_response = responses[-1] if responses else None
 
                     # Extract and display answer
-                    answer = (
-                        Agent.extract_final_answer(last_response)
-                        if last_response
-                        else "No response"
-                    )
+                    answer = Agent.extract_final_answer(last_response) if last_response else "No response"
                     logger.info(f"[REPL] Assistant response: {answer}")
                     print(f"\n[bold blue]Assistant:[/bold blue] {answer}")
 
@@ -243,9 +231,7 @@ async def async_main() -> None:
                     print()  # Add spacing
 
                     # Store in conversation history for reference
-                    conversation_history.append(
-                        {"user": user_input, "assistant": answer, "tools": tools_used}
-                    )
+                    conversation_history.append({"user": user_input, "assistant": answer, "tools": tools_used})
 
                 except KeyboardInterrupt:
                     logger.info("[REPL] KeyboardInterrupt received.")
