@@ -170,3 +170,4 @@ This demonstrates how message accumulation enables multi-step "reasoning".
 ## Conclusion
 
 z007 operates on simple principles: accumulated messages, structured tool calls, and turn-based reasoning loops. Understanding these fundamentals enables confident debugging, optimization, and extension regardless of framework choice.
+
