@@ -1,4 +1,4 @@
-# z007 ⚡ Fast Micro Agent
+# ⚡ z007 🤖
 
 *Pronounced as "ze double O 7"*
 

@@ -342,7 +342,7 @@ class ToolRegistry:
 
 
 class Agent:
-    """Fast Micro Agent with tool support - supports multiple LLM providers"""
+    """Agent with tool and MCP support"""
 
     def __init__(
         self,

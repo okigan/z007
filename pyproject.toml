@@ -9,7 +9,7 @@ packages = ["z007"]
 
 [project]
 name = "z007"
-version = "0.1.8"
+version = "0.1.9"
 description = "Micro agent with tool support and MCP integration."
 readme = "README.md"
 license = { text = "MIT" }

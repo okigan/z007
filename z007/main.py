@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-z007 - Fast Micro Agent Interactive REPL
+z007
 """
 
 import json
@@ -121,7 +121,7 @@ def load_mcp_config_from_file(config_path: str) -> dict[str, Any] | None:
 
 def print_help():
     """Print help information"""
-    print("[bold cyan]\n=== z007 - Fast Micro Agent ===[/bold cyan]")
+    print("[bold cyan]\n=== z007 ===[/bold cyan]")
     print("[bold yellow]Commands:[/bold yellow]")
     print("  [green]/help[/green]     - Show this help message")
     print("  [green]/tools[/green]    - List available tools")
@@ -153,7 +153,7 @@ async def async_main() -> None:
     model_id = "openai.gpt-oss-20b-1:0"
     mcp_config_filepath = find_mcp_config_file()
 
-    print("[bold cyan]Starting z007 - Fast Micro Agent...[/bold cyan]")
+    print("[bold cyan]Starting z007 ...[/bold cyan]")
     logger.info("[REPL] Starting agent main loop.")
     logger.info(f"Model: {model_id}")
     if mcp_config_filepath:

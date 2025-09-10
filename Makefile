@@ -45,14 +45,14 @@ publish-test:	## Publish to Test PyPI
 	uv publish --publish-url https://test.pypi.org/legacy/
 
 publish: build
-	# use export $(xargs < .env) to get the env setup	
+	# use `export $(xargs < .env)` to get the env setup	
 	uv publish
 
 record:
 	export PS1="igor %# "
 	printf '\e[8;24;100t'
 	asciinema rec demo.cast
-	agg demo.cast demo.mp4
+	agg demo.cast demo.gif
 
 	uvx z007
 	list current tools
