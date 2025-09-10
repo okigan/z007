@@ -1,0 +1,22 @@
+{
+    "python.analysis.typeCheckingMode": "strict",
+    "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.stubPath": "",
+    "python.analysis.extraPaths": [],
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportUnknownMemberType": "none",
+        "reportUnknownVariableType": "none",
+        "reportUnknownArgumentType": "none"
+    },
+    "terminal.integrated.env.osx": {
+        "PATH": "/Users/igor.okulist/.nvm/versions/node/v20.19.4/bin:${env:PATH}"
+    },
+    "mcp.env": {
+        "PATH": "/Users/igor.okulist/.nvm/versions/node/v20.19.4/bin:${env:PATH}"
+    },
+    "python.testing.pytestArgs": [
+        "."
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}
