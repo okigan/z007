@@ -5,7 +5,7 @@ A lightweight and readable agent for interacting with LLM on AWS Bedrock with to
 
 ## Features
 
-- 🟢 **Ultra Readable**: Clean, maintainable codebase in ~500 lines - easy to understand, modify, and extend
+- 🟢 **Ultra Readable**: Clean, maintainable codebase in about 600 lines - easy to understand, modify, and extend
 - ⚡ **Super easy**: Just run `uvx z007@latest`  with `AWS_PROFILE=<your profile>` in env and start chatting instantly  
 - ⚡ **Simple Install**: Quick install  `uv tool install --upgrade z007` and start chatting instantly `z007` with `AWS_PROFILE=<your profile>` in env
 - 🔧 **Tool Support**: Built-in calculator and easily use plain python functions as tools
@@ -18,12 +18,13 @@ A lightweight and readable agent for interacting with LLM on AWS Bedrock with to
 ### Install and run with uvx (recommended)
 
 ```bash
+```bash
 # Install and run directly with AWS_PROFILE configured - fastest way to start!
-uvx z007@latest
+AWS_PROFILE=your-profile uvx z007@latest
 
-# Or install globally with AWS_PROFILE configured
+# Or install globally
 uv tool install z007
-z007
+AWS_PROFILE=your-profile z007
 ```
 
 
@@ -45,7 +46,7 @@ pip install z007
 z007
 
 # With custom model (AWS Bedrock)
-z007 --model-id "anthropic.claude-3-sonnet-20240229-v1:0"
+AWS_PROFILE=your-profile z007 --model-id "openai.gpt-oss-120b-1:0"
 
 # With MCP configuration
 z007 --mcp-config ./mcp.json
@@ -57,10 +58,11 @@ z007 --mcp-config ./mcp.json
 
 ```python
 import asyncio
-from z007 import Agent
+from z007 import Agent, create_calculator_tool
 
 async def main():
-    async with Agent(model_id="openai.gpt-oss-20b-1:0") as agent:
+    calculator = create_calculator_tool()
+    async with Agent(model_id="openai.gpt-oss-20b-1:0", tools=[calculator]) as agent:
         response = await agent.run("What is 2+2?")
     print(response)
 
@@ -71,12 +73,14 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from z007 import Agent
+from z007 import Agent, create_calculator_tool
 
 async def main():
+    calculator = create_calculator_tool()
     async with Agent(
         model_id="openai.gpt-oss-20b-1:0",
-        system_prompt="You are a helpful coding assistant."
+        system_prompt="You are a helpful coding assistant.",
+        tools=[calculator]
     ) as agent:
         response = await agent.run("Write a Python function to reverse a string")
         print(response)
@@ -120,7 +124,7 @@ asyncio.run(main())
 
 Connect to Model Context Protocol servers for advanced capabilities:
 
-1. Create `.vscode/mcp.json`:
+1. Create `mcp.json`:
 
 ```json
 {
@@ -135,6 +139,10 @@ Connect to Model Context Protocol servers for advanced capabilities:
       "env": {
         "BRAVE_API_KEY": "${env:BRAVE_API_KEY}"
       }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
     }
   }
 }
@@ -143,17 +151,22 @@ Connect to Model Context Protocol servers for advanced capabilities:
 2. Use with z007:
 
 ```bash
-z007 --mcp-config .vscode/mcp.json
+z007 --mcp-config mcp.json
 ```
 
 Or in Python:
 
 ```python
+import json
 from z007 import Agent
+
+# Load MCP config
+with open("mcp.json") as f:
+    mcp_config = json.load(f)
 
 async with Agent(
     model_id="openai.gpt-oss-20b-1:0",
-    mcp_config_path=".vscode/mcp.json"
+    mcp_config=mcp_config
 ) as agent:
     response = await agent.run("Search for recent news about AI")
     print(response)
@@ -164,7 +177,7 @@ async with Agent(
 ### Environment Variables
 
 For AWS Bedrock (default provider):
-- `AWS_PROFILE`: AWS profile name
+- `AWS_PROFILE`: AWS profile name (e.g., `AWS_PROFILE=codemobs`)
 
   **or**
 
@@ -174,8 +187,10 @@ For AWS Bedrock (default provider):
 
 ### Supported Models
 
-Current AWS Bedrock models:
+AWS Bedrock models with verified access:
 - `openai.gpt-oss-20b-1:0` (default)
+
+Note: Model availability depends on your AWS account's Bedrock access permissions. Use `AWS_PROFILE=your-profile` to specify credentials.
 - Any AWS Bedrock model with tool support
 
 ## Interactive Commands
