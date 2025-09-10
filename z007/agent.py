@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, get_type_hints
 
 import anyio
+import boto3
 from boto3.session import Session
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s")
@@ -352,6 +353,9 @@ class Agent:
         mcp_config: dict[str, Any] | None = None,
         max_turns: int = 5,
     ):
+        if not can_access_bedrock():
+            raise RuntimeError("Cannot access AWS Bedrock -- please set up AWS credentials")
+
         self.model_id = model_id
         self.system_prompt = system_prompt
         self.max_turns = max_turns
@@ -586,3 +590,13 @@ def create_calculator_tool() -> Callable[..., str]:
             return f"Error: {e}"
 
     return calculator_tool
+
+
+def can_access_bedrock() -> bool:
+    """Checks if Boto3 credentials can call Bedrock, returning a boolean."""
+    try:
+        _ = boto3.Session().client("bedrock-runtime")
+        return True
+    except Exception as e:
+        logger.info(f"Unexpected Bedrock access error: {e}")
+        return False

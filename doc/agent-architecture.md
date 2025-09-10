@@ -10,7 +10,8 @@ The `z007` agent (~600 lines) demonstrates that effective AI agents operate on a
 1. **Conversations and memory are basically lists of messages**.
 1. **Tools and Model Control Protocol (MCP) are effectively lists of function(s)**.
 1. **Function results are appended to the lists of messages**.
-1. **Agentic workflow is just repetition of the above until terminated**.
+2. **LLM aggregates the above inferes an answer or next function calls**
+3. **Agentic workflow is just repetition of the above until terminated**.
 
 ## Demo
 ![demo gif](./demo.gif "Optional title text")
