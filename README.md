@@ -7,7 +7,7 @@ A lightweight and readable agent for interacting with LLM on AWS Bedrock with to
 ## Features
 
 - 🟢 **Ultra Readable**: Clean, maintainable codebase in ~500 lines - easy to understand, modify, and extend
-- ⚡ **Super easy**: Just run `uvx z007`  with `AWS_PROFILE=<your profile>` in env and start chatting instantly  
+- ⚡ **Super easy**: Just run `uvx z007@latest`  with `AWS_PROFILE=<your profile>` in env and start chatting instantly  
 - ⚡ **Simple Install**: Quick install  `uv tool install --upgrade z007` and start chatting instantly `z007` with `AWS_PROFILE=<your profile>` in env
 - 🔧 **Tool Support**: Built-in calculator and easily use plain python functions as tools
 - 🔌 **MCP Integration**: Connect to Model Context Protocol servers
@@ -20,7 +20,7 @@ A lightweight and readable agent for interacting with LLM on AWS Bedrock with to
 
 ```bash
 # Install and run directly with AWS_PROFILE configured - fastest way to start!
-uvx z007
+uvx z007@latest
 
 # Or install globally with AWS_PROFILE configured
 uv tool install z007

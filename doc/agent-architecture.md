@@ -18,7 +18,7 @@ The `z007` agent (~600 lines) demonstrates that effective AI agents operate on a
 
 ## Configure AWS_PROFILE then start the agent 
 ```bash
-uvx z007
+uvx z007@latest
 ```
 
 ## Baseline Architecture

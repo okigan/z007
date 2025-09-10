@@ -54,6 +54,6 @@ record:
 	asciinema rec demo.cast
 	agg demo.cast demo.gif
 
-	uvx z007
+	uvx z007@latest
 	list current tools
 	show hacker news headlines
