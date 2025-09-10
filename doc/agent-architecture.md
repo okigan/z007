@@ -1,17 +1,17 @@
-# z007: Nimble LLM Agent
+# ⚡ z007 🤖: Nimble AI Agent
 _pronounced: "zee-double-oh-seven"_ 
 
 ## TL;DR
 
-While frameworks like LangChain, Semantic Kernel, and AutoGen provide comprehensive toolkits with extensive abstractions, they can obscure the fundamental mechanics of how agents actually work. Understanding the baseline building blocks is essential for debugging, optimization, and building more complex systems.
+While frameworks like LangChain, Semantic Kernel, and AutoGen provide comprehensive toolkits with extensive abstractions, they can obscure the fundamental mechanics of how agents actually work. z007 explores the fundamentals and provides a simple, yet surprisingly useful agent architecture with tools and Model Control Protocol (MCP) support that can be easily understood and modified.
 
-The `z007` agent (~600 lines) demonstrates that effective AI agents operate on a few simple principles:
+`z007` agent in about 600 lines demonstrates that effective AI agents operate on a few simple principles:
 
 1. **Conversations and memory are basically lists of messages**.
-1. **Tools and Model Control Protocol (MCP) are effectively lists of function(s)**.
-1. **Function results are appended to the lists of messages**.
-2. **LLM aggregates the above inferes an answer or next function calls**
-3. **Agentic workflow is just repetition of the above until terminated**.
+2. **Tools and MCP are effectively lists of function(s)**.
+3. **Function results are appended to the lists of messages**.
+4. **LLM aggregates the above infers an answer or next function calls**
+5. **Agentic workflow is just repetition of the above until terminated**.
 
 ## Demo
 ![demo gif](./demo.gif "Optional title text")
@@ -75,7 +75,7 @@ class ToolRegistry:
         self.mcp_tools: dict[str, str] = {}  # Tool → server mapping
 ```
 
-### Tool Execution: From Function to LLM Call
+### Tool Execution
 
 Python functions become AI-callable tools through python introspection of function name, parameter names, doc string and associated type hints:
 

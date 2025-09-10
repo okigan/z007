@@ -1,6 +1,5 @@
-# ⚡ z007 🤖
-
-*Pronounced as "ze double O 7"*
+# ⚡ z007 🤖: Nimble AI Agent
+_pronounced: "zee-double-oh-seven"_ 
 
 A lightweight and readable agent for interacting with LLM on AWS Bedrock with tool and MCP (Model Context Protocol) support.
 
