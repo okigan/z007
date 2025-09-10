@@ -7,9 +7,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["z007"]
 
+[tool.hatch.version]
+path = "z007/__init__.py"
+
 [project]
 name = "z007"
-version = "0.1.10"
+dynamic = ["version"]
 description = "Micro agent with tool support and MCP integration."
 readme = "README.md"
 license = { text = "MIT" }

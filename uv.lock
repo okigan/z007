@@ -1048,7 +1048,6 @@ wheels = [
 
 [[package]]
 name = "z007"
-version = "0.1.9"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

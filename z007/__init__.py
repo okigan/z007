@@ -6,5 +6,5 @@ A lightning-fast tool for interacting with multiple LLM providers with tool supp
 
 from .agent import Agent, create_calculator_tool
 
-__version__ = "0.1.0"
+__version__ = "0.1.10"
 __all__ = ["Agent", "create_calculator_tool"]
