@@ -10,6 +10,15 @@
             "request": "launch",
             "program": "${file}",
             "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "name": "Debug z007 Module",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "z007.main",
+            "envFile": "${workspaceFolder}/.env",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
         }
     ]
 }

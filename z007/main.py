@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 from . import __version__
-from .agent import Agent
+from .agent import Agent, create_calculator_tool, get_called_tools
 
 # Set up rich logging with colorization and timestamps on every line
 rich_handler = RichHandler(
@@ -47,44 +47,10 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 
-def get_called_tools(responses: list[Any]) -> list[str]:
-    """Get list of called tools"""
-    tools: list[str] = []
-    for response in responses:
-        try:
-            content = response.get("output", {}).get("message", {}).get("content", [])
-            for item in content:
-                if isinstance(item, dict) and "toolUse" in item:
-                    tool_use = item["toolUse"]
-                    if tool_use:
-                        tool_name = tool_use.get("name")
-                        if tool_name:
-                            tools.append(str(tool_name))
-        except Exception:
-            continue
-    return tools
-
 
 def create_tools() -> list[Callable[..., Any]]:
     """Create and return list of tool functions"""
-    tools = []
-
-    # Simple tool functions
-    def calculator_tool(expression: str) -> str:
-        """Calculator tool - performs mathematical calculations"""
-        try:
-            # Basic safety check
-            if any(char in expression for char in ["import", "exec", "eval", "__"]):
-                return "Error: Invalid expression"
-            result: Any = eval(expression)  # eval can return Any type
-            return str(result)
-        except Exception as e:
-            return f"Error: {e}"
-
-    # Add basic tools
-    tools.extend([calculator_tool])
-
-    return tools
+    return [create_calculator_tool()]
 
 
 def find_mcp_config_file() -> str | None:
@@ -172,6 +138,8 @@ async def async_main() -> None:
             tools=tools,
             mcp_config=load_mcp_config_from_file(mcp_config_filepath) if mcp_config_filepath else None,
             max_turns=10,
+            # provider="openai",  # Use OpenAI-compatible provider
+            # provider_params={"base_url": "http://127.0.0.1:1234/v1"},
         ) as agent:
             # Show initial info
             local_count, mcp_server_count, mcp_tools_count = agent.get_tool_counts()

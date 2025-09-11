@@ -10,6 +10,7 @@ import logging
 import select
 import subprocess
 import time
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Callable, get_type_hints
 
@@ -23,6 +24,356 @@ logger = logging.getLogger(__name__)
 
 class ToolExecutionError(Exception):
     """Exception raised when tool execution fails"""
+
+
+class LLMProvider(ABC):
+    """Abstract base class for LLM providers"""
+
+    def __init__(self, model_id: str, params: dict[str, Any]):
+        self.model_id = model_id
+        self.params = params
+
+    @abstractmethod
+    async def run_conversation(
+        self,
+        prompt: str,
+        conversation_history: list[dict[str, Any]] | None,
+        system_prompt: str | None,
+        tool_registry: "ToolRegistry",
+        max_turns: int,
+    ) -> tuple[list[Any], list[dict[str, Any]]]:
+        """Run a conversation with the LLM provider"""
+        ...
+
+
+class BedrockProvider(LLMProvider):
+    """AWS Bedrock LLM provider"""
+
+    def __init__(self, model_id: str, params: dict[str, Any]):
+        super().__init__(model_id, params)
+        if not can_access_bedrock():
+            raise RuntimeError("Cannot access AWS Bedrock -- please set up AWS credentials")
+        self.client = Session().client("bedrock-runtime")
+
+    async def run_conversation(
+        self,
+        prompt: str,
+        conversation_history: list[dict[str, Any]] | None,
+        system_prompt: str | None,
+        tool_registry: "ToolRegistry",
+        max_turns: int,
+    ) -> tuple[list[Any], list[dict[str, Any]]]:
+        """Run conversation with Bedrock"""
+        # Start with provided conversation history or empty list
+        messages = conversation_history.copy() if conversation_history else []
+
+        # Add user message to conversation
+        messages.append({"role": "user", "content": [{"text": prompt}]})
+        responses = []
+
+        # Get tools in the format Bedrock expects
+        available_tools_raw = tool_registry.get_tool_specs()
+        available_tools = [{"toolSpec": tool["toolSpec"]} for tool in available_tools_raw]
+
+        for turn_num in range(max_turns):
+            tool_config = {"tools": available_tools, "toolChoice": {"any": {}}}
+
+            try:
+                # Prepare the converse parameters
+                converse_params = {
+                    "modelId": self.model_id,
+                    "messages": messages,  # type: ignore
+                    "toolConfig": tool_config,  # type: ignore
+                }
+
+                # Add system prompt as a separate parameter if provided
+                if system_prompt:
+                    converse_params["system"] = [{"text": system_prompt}]
+
+                # Make bedrock call
+                response = await anyio.to_thread.run_sync(  # type: ignore
+                    lambda: self.client.converse(**converse_params)
+                )
+                # Normalize to OpenAI format for consistency
+                normalized_response = self._normalize_bedrock_response_to_openai(response)
+                responses.append(normalized_response)
+
+                # Check if we need to handle tool calls (use raw response for processing)
+                stop_reason = response["stopReason"]
+                if stop_reason == "tool_use":
+                    # Get the assistant's message with tool calls
+                    output = response["output"]
+                    assistant_msg = output["message"]
+
+                    if assistant_msg:
+                        # Add assistant message to conversation
+                        messages.append(
+                            {
+                                "role": assistant_msg["role"],
+                                "content": assistant_msg["content"],
+                            }
+                        )
+
+                        # Extract tool calls
+                        tool_calls = []
+                        for item in assistant_msg["content"]:
+                            if "reasoningContent" in item:
+                                reasoning_content = item["reasoningContent"]
+                                reasoning_text = reasoning_content["reasoningText"]
+                                text = reasoning_text["text"]
+                                print(f"Reasoning: {text}")
+                            elif "toolUse" in item:
+                                tool_use = item["toolUse"]
+                                name = tool_use["name"]
+                                input_data = tool_use["input"]
+                                use_id = tool_use["toolUseId"]
+
+                                if name and use_id:
+                                    tool_calls.append((name, input_data, use_id))
+                            else:
+                                logger.warning(f"Unknown item in assistant message content: {item}")
+
+                        if tool_calls:
+                            # Execute all tools concurrently and collect results
+                            results = await _execute_tools_concurrently(tool_registry, tool_calls)
+
+                            # Add tool results to conversation
+                            messages.append({"role": "user", "content": results})
+                        else:
+                            logger.warning("No tool calls found despite tool_use stop reason")
+                            break
+                    else:
+                        logger.debug(f"No assistant message found in response: {response}")
+                        break
+                else:
+                    logger.debug(f"Conversation ended with stop reason: {stop_reason}")
+                    break
+
+            except Exception as e:
+                logger.error(f"Error in conversation turn {turn_num}: {e}")
+                break
+
+        return responses, messages
+
+    def _normalize_bedrock_response_to_openai(self, response: dict[str, Any]) -> dict[str, Any]:
+        """Convert Bedrock response format to OpenAI-style format for consistency"""
+        try:
+            output = response.get("output", {})
+            message = output.get("message", {})
+            content = message.get("content", [])
+
+            # Extract text content and tool calls
+            text_content = ""
+            tool_calls = []
+
+            for item in content:
+                if "text" in item:
+                    text_content = item["text"]
+                elif "toolUse" in item:
+                    tool_use = item["toolUse"]
+                    tool_calls.append(
+                        {
+                            "id": tool_use["toolUseId"],
+                            "type": "function",
+                            "function": {"name": tool_use["name"], "arguments": json.dumps(tool_use["input"])},
+                        }
+                    )
+
+            # Build OpenAI-style response
+            openai_message = {"role": "assistant", "content": text_content}
+
+            if tool_calls:
+                openai_message["tool_calls"] = tool_calls
+
+            return {"choices": [{"message": openai_message, "finish_reason": "tool_calls" if tool_calls else "stop"}]}
+
+        except Exception as e:
+            logger.error(f"Error normalizing Bedrock response: {e}")
+            return {
+                "choices": [
+                    {"message": {"role": "assistant", "content": "Error processing response"}, "finish_reason": "stop"}
+                ]
+            }
+
+    async def cleanup(self):
+        """Cleanup Bedrock resources (no-op for Bedrock)"""
+
+
+class OpenAIProvider(LLMProvider):
+    """OpenAI-compatible API provider using httpx"""
+
+    def __init__(self, model_id: str, params: dict[str, Any]):
+        super().__init__(model_id, params)
+        try:
+            import httpx
+        except ImportError:
+            raise ImportError("httpx package is required for OpenAI provider. Install with: uv add httpx")
+
+        self.base_url = params.get("base_url", "http://127.0.0.1:1234/v1")
+        self.api_key = params.get("api_key", "dummy-key")
+        self.client = httpx.AsyncClient(
+            base_url=self.base_url, headers={"Authorization": f"Bearer {self.api_key}"}, timeout=30.0
+        )
+
+    async def run_conversation(
+        self,
+        prompt: str,
+        conversation_history: list[dict[str, Any]] | None,
+        system_prompt: str | None,
+        tool_registry: "ToolRegistry",
+        max_turns: int,
+    ) -> tuple[list[Any], list[dict[str, Any]]]:
+        """Run conversation with OpenAI-compatible API using httpx"""
+        # Convert conversation history to OpenAI format
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        # Convert Bedrock format to OpenAI format
+        if conversation_history:
+            for msg in conversation_history:
+                if msg["role"] == "user":
+                    content = msg["content"]
+                    if isinstance(content, list) and len(content) > 0:
+                        if "text" in content[0]:
+                            messages.append({"role": "user", "content": content[0]["text"]})
+                        else:
+                            # Handle tool results
+                            messages.append({"role": "user", "content": str(content)})
+                elif msg["role"] == "assistant":
+                    content = msg["content"]
+                    if isinstance(content, list) and len(content) > 0 and "text" in content[0]:
+                        messages.append({"role": "assistant", "content": content[0]["text"]})
+
+        # Add current prompt
+        messages.append({"role": "user", "content": prompt})
+        responses = []
+
+        # Get tools in OpenAI format
+        tools = self._convert_tools_to_openai_format(tool_registry.get_tool_specs())
+
+        for turn_num in range(max_turns):
+            try:
+                # Prepare request payload
+                payload = {
+                    "model": self.model_id,
+                    "messages": messages,
+                }
+                if tools:
+                    payload["tools"] = tools
+                    payload["tool_choice"] = "auto"
+
+                # Make httpx request to chat completions endpoint
+                response = await self.client.post("/chat/completions", json=payload, timeout=300)
+                response.raise_for_status()
+
+                response_data = response.json()
+                responses.append(response_data)
+
+                # Extract message from response
+                if "choices" not in response_data or not response_data["choices"]:
+                    break
+
+                message = response_data["choices"][0]["message"]
+                content = message.get("content", "")
+                messages.append({"role": "assistant", "content": content})
+
+                # Check for tool calls
+                tool_calls_data = message.get("tool_calls")
+                if tool_calls_data:
+                    tool_calls = []
+                    for tool_call in tool_calls_data:
+                        function_data = tool_call["function"]
+                        tool_calls.append(
+                            (function_data["name"], json.loads(function_data["arguments"]), tool_call["id"])
+                        )
+
+                    if tool_calls:
+                        # Execute tools
+                        results = await _execute_tools_concurrently(tool_registry, tool_calls)
+
+                        # Convert results to OpenAI format
+                        for i, (_, _, tool_call_id) in enumerate(tool_calls):
+                            result = results[i]
+                            content = result["toolResult"]["content"][0]["text"]
+                            messages.append({"role": "tool", "content": content, "tool_call_id": tool_call_id})
+                        # Continue to get LLM response to tool results
+                        continue
+
+                    break
+
+                # No tool calls, conversation is complete
+                break
+
+            except Exception as e:
+                logger.error(f"Error in conversation turn {turn_num}: {e}")
+                break
+
+        # Convert back to Bedrock format for consistency
+        bedrock_messages = []
+        for msg in messages:
+            if msg["role"] in ["user", "assistant"]:
+                bedrock_messages.append({"role": msg["role"], "content": [{"text": msg.get("content", "")}]})
+
+        return responses, bedrock_messages
+
+    async def cleanup(self):
+        """Cleanup httpx client"""
+        if hasattr(self, "client"):
+            await self.client.aclose()
+
+    def _convert_tools_to_openai_format(self, bedrock_tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Convert Bedrock tool format to OpenAI format"""
+        openai_tools = []
+        for tool in bedrock_tools:
+            tool_spec = tool["toolSpec"]
+            openai_tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool_spec["name"],
+                        "description": tool_spec["description"],
+                        "parameters": tool_spec["inputSchema"]["json"],
+                    },
+                }
+            )
+        return openai_tools
+
+
+async def _execute_tools_concurrently(
+    tool_registry: "ToolRegistry", tool_calls: list[tuple[str, dict[str, Any], str]]
+) -> list[dict[str, Any]]:
+    """Execute all tools concurrently and return results"""
+
+    async def execute_single_tool(name: str, input_data: dict[str, Any], use_id: str) -> dict[str, Any]:
+        try:
+            result = await tool_registry.execute(name, input_data)
+            return {"toolResult": {"toolUseId": use_id, "content": [{"text": result}]}}
+        except Exception as e:
+            logger.error(f"Tool execution failed: {e}")
+            return {
+                "toolResult": {
+                    "toolUseId": use_id,
+                    "content": [{"text": f"Error: {e!s}"}],
+                    "status": "error",
+                }
+            }
+
+    # Execute all tools concurrently
+    results: list[dict[str, Any]] = [{}] * len(tool_calls)
+    async with anyio.create_task_group() as tg:
+        for i, (name, input_data, use_id) in enumerate(tool_calls):
+
+            async def run_tool(
+                idx: int = i,
+                n: str = name,
+                d: dict[str, Any] = input_data,
+                u: str = use_id,
+            ) -> None:
+                results[idx] = await execute_single_tool(n, d, u)
+
+            tg.start_soon(run_tool)
+    return results
 
 
 class ToolRegistry:
@@ -262,8 +613,8 @@ class ToolRegistry:
         """Execute MCP tool asynchronously"""
         return await anyio.to_thread.run_sync(self._execute_mcp_sync, tool_name, tool_input)  # type: ignore
 
-    def get_bedrock_specs(self) -> list[dict[str, Any]]:
-        """Get all tools as Bedrock specifications"""
+    def get_tool_specs(self) -> list[dict[str, Any]]:
+        """Get all tools as tool specifications"""
         specs: list[dict[str, Any]] = []
 
         # Local tools
@@ -348,18 +699,24 @@ class Agent:
     def __init__(
         self,
         model_id: str,
+        provider: str = "bedrock",
+        provider_params: dict[str, Any] | None = None,
         system_prompt: str | None = None,
         tools: list[Callable[..., Any]] | None = None,
         mcp_config: dict[str, Any] | None = None,
         max_turns: int = 5,
     ):
-        if not can_access_bedrock():
-            raise RuntimeError("Cannot access AWS Bedrock -- please set up AWS credentials")
+        # Create provider
+        params = provider_params or {}
+        if provider == "bedrock":
+            self._provider = BedrockProvider(model_id, params)
+        elif provider == "openai":
+            self._provider = OpenAIProvider(model_id, params)
+        else:
+            raise ValueError(f"Unknown provider: {provider}")
 
-        self.model_id = model_id
         self.system_prompt = system_prompt
         self.max_turns = max_turns
-        self.bedrock_runtime_client = Session().client("bedrock-runtime")
 
         # Create internal tool registry
         self._tool_registry = ToolRegistry()
@@ -427,8 +784,18 @@ class Agent:
 
     @staticmethod
     def extract_final_answer(response: Any) -> str:
-        """Extract final answer from response"""
+        """Extract final answer from response (OpenAI format)"""
         try:
+            # Handle OpenAI format
+            choices = response.get("choices")
+            if choices:
+                choice = choices[0]
+                message = choice.get("message", {})
+                content = message.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    return content.strip()
+
+            # Fallback: try Bedrock format for backward compatibility
             content = response.get("output", {}).get("message", {}).get("content", [])
             for item in content:
                 if isinstance(item, dict) and "text" in item:
@@ -439,45 +806,10 @@ class Agent:
         except Exception:
             return "No final answer found"
 
-    async def _execute_tools_concurrently(
-        self, tool_calls: list[tuple[str, dict[str, Any], str]]
-    ) -> list[dict[str, Any]]:
-        """Execute all tools concurrently and return results"""
-
-        async def execute_single_tool(name: str, input_data: dict[str, Any], use_id: str) -> dict[str, Any]:
-            try:
-                result = await self._tool_registry.execute(name, input_data)
-                return {"toolResult": {"toolUseId": use_id, "content": [{"text": result}]}}
-            except Exception as e:
-                logger.error(f"Tool execution failed: {e}")
-                return {
-                    "toolResult": {
-                        "toolUseId": use_id,
-                        "content": [{"text": f"Error: {e!s}"}],
-                        "status": "error",
-                    }
-                }
-
-        # Execute all tools concurrently
-        results: list[dict[str, Any]] = [{}] * len(tool_calls)
-        async with anyio.create_task_group() as tg:
-            for i, (name, input_data, use_id) in enumerate(tool_calls):
-
-                async def run_tool(
-                    idx: int = i,
-                    n: str = name,
-                    d: dict[str, Any] = input_data,
-                    u: str = use_id,
-                ) -> None:
-                    results[idx] = await execute_single_tool(n, d, u)
-
-                tg.start_soon(run_tool)
-        return results
-
     async def run_conversation(
         self, prompt: str, conversation_history: list[dict[str, Any]] | None = None
     ) -> tuple[list[Any], list[dict[str, Any]]]:
-        """Run conversation with tool support - async tool execution using AnyIO
+        """Run conversation with tool support - delegates to provider
 
         Args:
             prompt: The user's input message
@@ -486,93 +818,33 @@ class Agent:
         Returns:
             Tuple of (responses from LLM, updated conversation history)
         """
-        # Start with provided conversation history or empty list
-        messages = conversation_history.copy() if conversation_history else []
+        return await self._provider.run_conversation(
+            prompt, conversation_history, self.system_prompt, self._tool_registry, self.max_turns
+        )
 
-        # Add user message to conversation
-        messages.append({"role": "user", "content": [{"text": prompt}]})
-        responses = []
+    async def cleanup(self):
+        """Cleanup provider resources"""
+        if hasattr(self._provider, "cleanup"):
+            await self._provider.cleanup()
 
-        # Get tools in the format Bedrock expects
-        available_tools_raw = self._tool_registry.get_bedrock_specs()
-        available_tools = [{"toolSpec": tool["toolSpec"]} for tool in available_tools_raw]
 
-        for turn_num in range(self.max_turns):
-            tool_config = {"tools": available_tools, "toolChoice": {"any": {}}}
-
-            try:
-                # Prepare the converse parameters
-                converse_params = {
-                    "modelId": self.model_id,
-                    "messages": messages,  # type: ignore
-                    "toolConfig": tool_config,  # type: ignore
-                }
-
-                # Add system prompt as a separate parameter if provided
-                if self.system_prompt:
-                    converse_params["system"] = [{"text": self.system_prompt}]
-                # Make bedrock call
-                response = await anyio.to_thread.run_sync(  # type: ignore
-                    lambda: self.bedrock_runtime_client.converse(**converse_params)
-                )
-                responses.append(response)
-
-                # Check if we need to handle tool calls
-                stop_reason = response["stopReason"]
-                if stop_reason == "tool_use":
-                    # Get the assistant's message with tool calls
-                    output = response["output"]
-                    assistant_msg = output["message"]
-
-                    if assistant_msg:
-                        # Add assistant message to conversation
-                        messages.append(
-                            {
-                                "role": assistant_msg["role"],
-                                "content": assistant_msg["content"],
-                            }
-                        )
-
-                        # Extract tool calls
-                        tool_calls = []
-                        for item in assistant_msg["content"]:
-                            if "reasoningContent" in item:
-                                reasoning_content = item["reasoningContent"]
-                                reasoning_text = reasoning_content["reasoningText"]
-                                text = reasoning_text["text"]
-                                print(f"Reasoning: {text}")
-                            elif "toolUse" in item:
-                                tool_use = item["toolUse"]
-                                name = tool_use["name"]
-                                input_data = tool_use["input"]
-                                use_id = tool_use["toolUseId"]
-
-                                if name and use_id:
-                                    tool_calls.append((name, input_data, use_id))
-                            else:
-                                logger.warning(f"Unknown item in assistant message content: {item}")
-
-                        if tool_calls:
-                            # Execute all tools concurrently and collect results
-                            results = await self._execute_tools_concurrently(tool_calls)
-
-                            # Add tool results to conversation
-                            messages.append({"role": "user", "content": results})
-                        else:
-                            logger.warning("No tool calls found despite tool_use stop reason")
-                            break
-                    else:
-                        logger.debug(f"No assistant message found in response: {response}")
-                        break
-                else:
-                    logger.debug(f"Conversation ended with stop reason: {stop_reason}")
-                    break
-
-            except Exception as e:
-                logger.error(f"Error in conversation turn {turn_num}: {e}")
-                break
-
-        return responses, messages
+def get_called_tools(responses: list[Any]) -> list[str]:
+    """Get list of called tools (OpenAI format only)"""
+    tools: list[str] = []
+    for response in responses:
+        try:
+            choices = response.get("choices", [])
+            for choice in choices:
+                message = choice.get("message", {})
+                tool_calls = message.get("tool_calls", [])
+                for tool_call in tool_calls:
+                    function_data = tool_call.get("function", {})
+                    tool_name = function_data.get("name")
+                    if tool_name:
+                        tools.append(str(tool_name))
+        except Exception:
+            continue
+    return tools
 
 
 def create_calculator_tool() -> Callable[..., str]:
