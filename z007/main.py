@@ -3,6 +3,7 @@
 z007
 """
 
+import argparse
 import json
 import logging
 import sys
@@ -46,6 +47,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 console = Console()
 
+
+def parse_args():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description="z007 AI Assistant with tool and MCP support")
+    parser.add_argument(
+        "--provider", choices=["bedrock", "openai"], default="bedrock", help="LLM provider to use (default: bedrock)"
+    )
+    parser.add_argument(
+        "--model", default="openai.gpt-oss-20b-1:0", help="Model ID to use (default: openai.gpt-oss-20b-1:0)"
+    )
+    parser.add_argument(
+        "--base-url",
+        help="Base URL for OpenAI-compatible API (default: http://127.0.0.1:1234/v1)",
+        default="http://127.0.0.1:1234/v1",
+    )
+    parser.add_argument("--api-key", help="API key for OpenAI-compatible API (default: dummy-key)", default="dummy-key")
+    return parser.parse_args()
 
 
 def create_tools() -> list[Callable[..., Any]]:
@@ -117,11 +135,21 @@ def print_tools_info(agent: Agent):
 
 async def async_main() -> None:
     """Main REPL function"""
-    model_id = "openai.gpt-oss-20b-1:0"
+    args = parse_args()
+
+    model_id = args.model
+    provider = args.provider
+    provider_params = {}
+
+    # Set provider-specific parameters
+    if provider == "openai":
+        provider_params = {"base_url": args.base_url, "api_key": args.api_key}
+
     mcp_config_filepath = find_mcp_config_file()
 
     print(f"[bold cyan]Starting z007 v{__version__} ...[/bold cyan]")
     logger.info("[REPL] Starting agent main loop.")
+    logger.info(f"Provider: {provider}")
     logger.info(f"Model: {model_id}")
     if mcp_config_filepath:
         logger.info(f"Using MCP config: {mcp_config_filepath}")
@@ -134,12 +162,12 @@ async def async_main() -> None:
     try:
         async with Agent(
             model_id=model_id,
+            provider=provider,
+            provider_params=provider_params,
             system_prompt="You are a helpful assistant with access to various tools. Be concise but informative in your responses.",
             tools=tools,
             mcp_config=load_mcp_config_from_file(mcp_config_filepath) if mcp_config_filepath else None,
             max_turns=10,
-            # provider="openai",  # Use OpenAI-compatible provider
-            # provider_params={"base_url": "http://127.0.0.1:1234/v1"},
         ) as agent:
             # Show initial info
             local_count, mcp_server_count, mcp_tools_count = agent.get_tool_counts()
