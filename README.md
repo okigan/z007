@@ -18,13 +18,19 @@ A lightweight and readable agent for interacting with LLM on AWS Bedrock with to
 ### Install and run with uvx (recommended)
 
 ```bash
-```bash
 # Install and run directly with AWS_PROFILE configured - fastest way to start!
-AWS_PROFILE=your-profile uvx z007@latest
+AWS_PROFILE=<your-profile> uvx z007@latest
+```
 
+```bash
 # Or install globally
 uv tool install z007
-AWS_PROFILE=your-profile z007
+AWS_PROFILE=<your-profile> z007
+```
+
+```bash
+# Or use with local model
+uvx z007@latest --provider openai --base-url http://localhost:1234/v1 --model openai/gpt-oss-20b
 ```
 
 

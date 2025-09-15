@@ -59,7 +59,8 @@ The agent operates in a simple loop: receive input, process with the LLM, execut
 
 ### Message-Based State Management
 
-The agent's "memory" is straightforward—it's just a growing list of messages that captures the entire conversation history:
+The agent's "memory" is straightforward—it's just a growing list of messages that captures the entire conversation history. Each conversation turn adds new messages to this list, building the context that enables coherent multi-turn interactions.
+
 
 ```python
 messages = []
@@ -69,30 +70,19 @@ messages.append({"role": "user", "content": [{"text": prompt}]})
 
 For AWS Bedrock, system prompts are handled slightly differently:
 ```python
-# AWS Bedrock system prompt format
 if self.system_prompt:
     converse_params["system"] = [{"text": self.system_prompt}]
 ```
 
-Each conversation turn adds new messages to this list, building the context that enables coherent multi-turn interactions.
+### Tool Management
 
-### Tool Management: One Interface for Everything
-
-The `ToolRegistry` provides a unified way to handle both local Python functions and external MCP (Model Control Protocol) services:
-
-```python
-class ToolRegistry:
-    def __init__(self) -> None:
-        self.tools: dict[str, Callable] = {}  # Local functions
-        self.mcp_servers: dict[str, subprocess.Popen] = {}  # External processes
-        self.mcp_tools: dict[str, str] = {}  # Tool → server mapping
-```
+Agent useds`ToolRegistry` class to handle tool calling. In turn the `ToolRegistry` handles Python functions and tools provided by MCPs (Model Control Protocol).
 
 This design treats MCPs as collections of remotely-callable functions, accessed via JSON-RPC but used identically to local tools.
 
 ### How Tools Work
 
-Converting a Python function into an AI-callable tool is automatic. The system uses introspection to examine function names, parameters, docstrings, and type hints:
+`ToolRegistry` converts Python function(s) into an Agent-callable tool by introspecting function name, parameters, docstring, and type hints:
 
 ```python
 def calculator_tool(expression: str) -> str:
@@ -100,7 +90,7 @@ def calculator_tool(expression: str) -> str:
     return str(eval(expression))
 ```
 
-The registry automatically converts this into the LLM's expected tool specification:
+The `ToolRegistry` automatically converts this into the LLM's compatible tool specification:
 ```python
 {
     "toolSpec": {
@@ -116,16 +106,9 @@ The registry automatically converts this into the LLM's expected tool specificat
 Here's how tools get called and used:
 
 1. **LLM decides it needs a tool** → returns `tool_use` stop reason
-   - *Why this happens*: The LLM recognizes it needs external data or computation beyond its training knowledge
-
 2. **Agent extracts tool calls** from the LLM's response
-   - *Why this step*: Parse the structured tool requests to identify which functions to call with what parameters
-
 3. **ToolRegistry executes tools concurrently** using structured concurrency  
-   - *Why concurrent*: Multiple independent tools can run in parallel for better performance
-
 4. **Agent adds results back** to the conversation as user messages
-   - *Why as user messages*: Tool outputs become part of the conversation history, allowing the LLM to reason about the results
 
 ## The Conversation Loop
 
@@ -158,20 +141,6 @@ Let's trace through a complete interaction to see how everything works together.
 **Turn 2**: LLM calls calculator → `calculator_tool("345 * 2")` → returns "690"  
 **Turn 3**: LLM provides final answer → "First, 15 * 23 = 345. Then, 345 * 2 = 690. So the final answer is 690."
 
-**Final message history**:
-```python
-[
-    {"role": "user", "content": [{"text": "What is 15 * 23, and then multiply that result by 2?"}]},
-    {"role": "assistant", "content": [{"toolUse": {...}}]},  # First calculation
-    {"role": "user", "content": [{"toolResult": {...}}]},   # Result: "345"
-    {"role": "assistant", "content": [{"toolUse": {...}}]},  # Second calculation  
-    {"role": "user", "content": [{"toolResult": {...}}]},   # Result: "690"
-    {"role": "assistant", "content": [{"text": "First, 15 * 23 = 345..."}]}
-]
-```
-
-This shows how message accumulation enables multi-step reasoning—each step builds on previous results.
-
 ## Choosing the Right Tool
 
 ### When Comprehensive Frameworks Make Sense
@@ -191,6 +160,19 @@ This shows how message accumulation enables multi-step reasoning—each step bui
 **Performance**: Minimal overhead with direct control over async execution patterns and resource usage
 
 **Learning**: Perfect for understanding the fundamental concepts before moving to more complex frameworks
+
+## Not covered
+While z007 effectively illustrates the fundamental principles of autonomous agents, several critical aspects have been intentionally simplified or omitted to maintain clarity. Some of these would be part of the agentic system and some are part of the infrastructure they would be deployed in:
+
+**Error Handling & Recovery**: The system does not address LLM failures, tool execution errors, or strategies for retries and graceful degradation when components fail.
+
+**Structured Outputs**: Features such as JSON schema validation, multi-modal response handling, and real-time parsing of streaming outputs are not implemented.
+
+**Production Concerns**: Key operational elements like authentication, rate limiting, monitoring, caching, resource management, and horizontal scaling are not covered.
+
+**Advanced Patterns**: Complex behaviors such as multi-agent coordination, long-term memory systems, planning, reasoning chains, and adaptive learning are excluded.
+
+**Security & Compliance**: The framework does not incorporate security measures or compliance requirements essential for real-world deployment.
 
 ## Key Takeaways
 
