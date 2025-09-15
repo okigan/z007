@@ -3,9 +3,9 @@ _pronounced: "zee-double-oh-seven"_
 
 ## TL;DR
 
-While frameworks like LangChain, Semantic Kernel, and AutoGen provide comprehensive toolkits with extensive abstractions, they can obscure the fundamental mechanics of how agents actually work. z007 explores the fundamentals and provides a simple, yet surprisingly useful agent architecture with tools and Model Control Protocol (MCP) support that can be easily understood and modified.
+While frameworks like LangChain, Semantic Kernel, and AutoGen provide comprehensive toolkits with extensive abstractions, they can obscure the fundamental mechanics of how agents actually work. z007 explores the fundamentals and provides a simple, yet surprisingly useful agent with tools and Model Control Protocol (MCP) support that can be easily understood and modified.
 
-`z007` agent in about 600 lines demonstrates that effective AI agents operate on a few simple principles:
+****z007**** agent in about 600 lines demonstrates that effective AI agents operate on a few simple principles:
 
 1. **Conversations and memory are basically lists of messages**.
 2. **Tools and MCP are effectively lists of function(s)**.
@@ -13,12 +13,20 @@ While frameworks like LangChain, Semantic Kernel, and AutoGen provide comprehens
 4. **LLM aggregates the above infers an answer or next function calls**
 5. **Agentic workflow is just repetition of the above until terminated**.
 
+Additionally **z007** can use generic OpenAI API over HTTP which allows to use **z007** with other LLM providers either locally or remote.
+
 ## Demo
 ![demo gif](./demo.gif "Optional title text")
 
-## Configure AWS_PROFILE then start the agent 
+## Quick start z007
+### with AWS
 ```bash
-uvx z007@latest
+AWS_PROFILE=<your profile> uvx z007@latest
+```
+
+### with local model
+```bash
+uvx z007@latest --provider openai --base-url http://localhost:1234/v1
 ```
 
 ## Baseline Architecture
@@ -170,5 +178,5 @@ This demonstrates how message accumulation enables multi-step "reasoning".
 
 ## Conclusion
 
-z007 operates on simple principles: accumulated messages, structured tool calls, and turn-based reasoning loops. Understanding these fundamentals enables confident debugging, optimization, and extension regardless of framework choice.
+**z007** operates on simple principles: accumulated messages, structured tool calls, and turn-based reasoning loops. Understanding these fundamentals enables confident debugging, optimization, and extension regardless of framework choice.
 
