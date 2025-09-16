@@ -109,7 +109,7 @@ uvx z007@latest --provider openai --base-url http://localhost:1234/v1
 uvx z007@latest --provider openai --base-url http://localhost:11434/v1 --model gpt-oss:20b
 ```
 
-This flexibility ensures that z007 can adapt to different deployment scenarios without architectural changes, from cloud-based solutions to offline environments. A full fledged adapters for different provides are much more complex and if you need now check out [liteLLM](https://www.litellm.ai/)
+This flexibility ensures that z007 can adapt to different deployment scenarios without architectural changes, from cloud-based solutions to offline environments. A full fledged adapters for different provides are much more complex and if you need more comprehensive provider support, check out [liteLLM](https://www.litellm.ai/)
 
 ## What z007 Reveals About Agent Architecture
 
