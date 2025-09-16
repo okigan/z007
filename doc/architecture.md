@@ -76,13 +76,7 @@ if self.system_prompt:
 
 ### Tool Management
 
-Agent useds`ToolRegistry` class to handle tool calling. In turn the `ToolRegistry` handles Python functions and tools provided by MCPs (Model Control Protocol).
-
-This design treats MCPs as collections of remotely-callable functions, accessed via JSON-RPC but used identically to local tools.
-
-### How Tools Work
-
-`ToolRegistry` converts Python function(s) into an Agent-callable tool by introspecting function name, parameters, docstring, and type hints:
+Agent useds`ToolRegistry` class to handle tool calling. In turn the `ToolRegistry` handles Python functions and tools provided by MCPs (Model Control Protocol). This design treats MCPs as collections of remotely-callable functions, accessed via JSON-RPC but used identically to local tools `ToolRegistry` converts Python function(s) into an Agent-callable tool by introspecting function name, parameters, docstring, and type hints:
 
 ```python
 def calculator_tool(expression: str) -> str:
@@ -151,7 +145,7 @@ Let's trace through a complete interaction to see how everything works together.
 | **AutoGen** | Multi-agent conversations with role-based interactions | Complex message routing and lifecycle management |
 | **Semantic Kernel** | Enterprise integration, especially Microsoft ecosystem | Steep learning curve and heavy configuration overhead |
 
-### When z007's Simplicity Wins
+### z007's benefits
 
 **Transparency**: You can see exactly how the agent works without digging through framework abstractions
 
