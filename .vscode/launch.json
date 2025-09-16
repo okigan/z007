@@ -18,7 +18,12 @@
             "module": "z007.main",
             "envFile": "${workspaceFolder}/.env",
             "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "args": [
+                "--provider", "openai",
+                "--base-url", "http://localhost:11434/v1/",
+                "--model", "gpt-oss:20b",
+            ]
         }
     ]
 }

@@ -21,14 +21,23 @@ Most AI agent frameworks like LangChain, Semantic Kernel, and AutoGen offer comp
 
 ## Quick Start
 
-### Using AWS
+
+#### Cloud based with AWS Bedrock
+Run with your AWS profile:
 ```bash
 AWS_PROFILE=<your profile> uvx z007@latest
 ```
 
-### Using Local Model
+#### Locally with lm-studio
+Run with lm-studio (OpenAI-compatible API):
 ```bash
 uvx z007@latest --provider openai --base-url http://localhost:1234/v1
+```
+
+#### Locally with ollama
+Run with ollama (OpenAI-compatible API):
+```bash
+uvx z007@latest --provider openai --base-url http://localhost:11434/v1 --model gpt-oss:20b
 ```
 
 ## Core Architecture
