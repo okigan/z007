@@ -34,7 +34,7 @@ uvx z007@latest --provider openai --base-url http://localhost:1234/v1 --model op
 ```
 
 
-![demo gif](./doc/demo.gif "Optional title text")
+![demo gif](./doc/demo.gif "Demo")
 
 
 ### Install as Python package

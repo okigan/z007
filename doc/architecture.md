@@ -10,6 +10,8 @@ z007 takes a deliberately different approach and demonstrates that effective AI 
 
 By removing abstractions, we can see clearly how AI agents actually function. This transparency serves multiple purposes: it makes debugging straightforward, customization trivial, and provides the foundational understanding needed to work effectively with any agent framework.
 
+![demo gif](./demo.gif "Demo")
+
 ## How z007 Works: The Agent Loop
 
 At its core, z007 operates through a simple but powerful loop that mirrors how humans approach complex problems—we gather information, think about it, take action if needed, then repeat until we reach a solution.
